@@ -72,6 +72,7 @@ Each workstream has one clear output. "Needs" lists only what it must wait for; 
 - **Output:** the results table and the saved Students (Results interface).
 - **Needs:** W1, W2, W3.
 - **Open questions:** loss weights and KD temperature; epochs; number of seeds; Probe Head design; whether and how to use the DGX (e.g. the git-fed job runner already used in another project); logging.
+- **DGX facts (onboarding test, 2026-11-18):** the repo installs and passes `make test` on the DGX (NVIDIA H200 MIG slice, driver 580.196.07, uv 0.12, GNU Make 4.3); the driver meets the ≥ 580 requirement of the locked torch 2.15 / CUDA 13 build (a `torch.cuda.is_available()` check on the DGX is still to be confirmed). The slice (~16 GB) is **shared with another project's job runner** and runs one GPU job at a time, so TopKD training there needs scheduling around it. Unset `UV_PROJECT_ENVIRONMENT` before `make install` if your shell exports it.
 
 ### W5 — Analysis & visuals
 - **Output:** figures and tables for the memoria and the slides.
