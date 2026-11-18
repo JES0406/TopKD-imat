@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Large artifacts: datasets, checkpoints, latent point clouds -> DagsHub / HF, never git
+/data/
+/checkpoints/
+/artifacts/
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+wandb/
+
+# LaTeX build files
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.bbl
+*.blg
+
+# Claude Code worktrees
+.claude/worktrees/
