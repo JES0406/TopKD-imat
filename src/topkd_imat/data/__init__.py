@@ -1,4 +1,4 @@
-"""Dataset loaders for the Core Dataset (MNIST) and the Extension Datasets.
+"""Dataset loaders for the Core Dataset (CIFAR-10) and the Extension Datasets.
 
 Owner: Models subteam (W1).
 """

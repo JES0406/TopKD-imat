@@ -188,7 +188,7 @@ footer { font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--li
   <header>
     <div class="eyebrow">Geometría de la Información · MIA · final project</div>
     <h1>TopKD-imat Team Board</h1>
-    <p class="muted prose">Does teaching a small network the <em>shape</em> of a big network's latent space help it learn? We adapt TopKD (Kim et al., ICML 2024) to MNIST, where that shape can be checked by eye.</p>
+    <p class="muted prose">Does teaching a small network the <em>shape</em> of a big network's latent space help it learn? We adapt TopKD (Kim et al., ICML 2024) to CIFAR-10, where that shape can be checked by eye.</p>
     <div class="facts">
       <div class="fact due"><span class="k">Memoria due</span><span class="v">Fri 27 Nov</span><span class="s" id="countdown"></span></div>
       <div class="fact"><span class="k">Presentations</span><span class="v">1 – 4 Dec</span><span class="s">7 min + professor's questions</span></div>
@@ -205,19 +205,19 @@ footer { font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--li
     </div>
     <div class="what">
       <div class="prose">
-        <p class="question">On MNIST, does adding a topology loss make the Student's latent space take on the Teacher's shape, and does that help accuracy beyond plain knowledge distillation?</p>
+        <p class="question">On CIFAR-10, does adding a topology loss make the Student's latent space take on the Teacher's shape, and does that help accuracy beyond plain knowledge distillation?</p>
         <p><b>Knowledge distillation:</b> a small <em>Student</em> learns from a big pre-trained <em>Teacher</em> by imitating its outputs.</p>
         <p><b>TopKD</b> also makes the Student imitate the <em>topology</em> of the Teacher's latent space: for each batch, the embeddings form a point cloud, its persistence diagram summarises its shape, and a persistence image turns that into a grid the loss can compare.</p>
-        <p><b>Why MNIST:</b> it is interpretable. A good Teacher puts the 10 digits in 10 clusters, which shows up as 9 long-lived H0 bars, so we can <em>see</em> whether a diagram is good and whether the Student copied it.</p>
+        <p><b>Why CIFAR-10:</b> it is interpretable and less trivial than MNIST (chosen 21 Nov). A good Teacher puts the 10 classes in 10 clusters, which shows up as 9 long-lived H0 bars, so we can <em>see</em> whether a diagram is good and whether the Student copied it.</p>
       </div>
       <div class="barcode-box" aria-label="Illustration of an H0 barcode for 10 clusters">
         <span class="eyebrow">What "good shape" looks like</span>
         <svg id="barcode" viewBox="0 0 360 200" role="img" aria-label="H0 barcode: many short bars and 9 long bars plus one infinite bar"></svg>
-        <span class="cap">Illustrative H0 barcode of a batch's latent point cloud: short bars are noise inside a cluster; the 9 long bars plus one infinite bar mean 10 well-separated digit clusters.</span>
+        <span class="cap">Illustrative H0 barcode of a batch's latent point cloud: short bars are noise inside a cluster; the 9 long bars plus one infinite bar mean 10 well-separated class clusters.</span>
       </div>
     </div>
     <div class="pipeline" aria-label="Pipeline">
-      <span class="step">MNIST batch</span><span class="arrow">→</span>
+      <span class="step">CIFAR-10 batch</span><span class="arrow">→</span>
       <span class="step">Teacher (~25 layers) · Student (~5)</span><span class="arrow">→</span>
       <span class="step">latent point cloud per layer pair</span><span class="arrow">→</span>
       <span class="step">persistence diagram</span><span class="arrow">→</span>
@@ -247,14 +247,14 @@ footer { font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--li
       <div class="prose">
         <h3>Datasets</h3>
         <ul class="list">
-          <li><b>MNIST</b> — core dataset: full grid, used in the presentation.</li>
-          <li><b>Fashion-MNIST and similar</b> — extra runs for the memoria only.</li>
+          <li><b>CIFAR-10</b> — core dataset: full grid, used in the presentation.</li>
+          <li><b>Extra datasets</b> (W7's call) — extra runs for the memoria only.</li>
         </ul>
         <h3>Where we differ from the paper</h3>
         <ul class="list">
           <li><b>Exact</b> persistence images from the course libraries (gudhi, ripser/persim, giotto-tda) — no RipsNet approximation.</li>
           <li>Topology loss at <b>several layer pairs</b> (Teacher layer 5k ↔ Student layer k), not one.</li>
-          <li>Small, interpretable task instead of CIFAR-100 / ImageNet.</li>
+          <li>Small, interpretable task (CIFAR-10) instead of CIFAR-100 / ImageNet.</li>
         </ul>
       </div>
     </div>
@@ -265,7 +265,7 @@ footer { font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--li
     <div class="section-head">
       <span class="eyebrow">Who</span>
       <h2 id="who-h">Workstreams and owners</h2>
-      <p class="muted prose">Add the team once, then assign people to each workstream. Several people can share one. Names are kept only in this browser.</p>
+      <p class="muted prose">Pre-filled with the assignment agreed on 21 Nov. Changes you make here are kept only in this browser.</p>
     </div>
 
     <div class="roster">
@@ -387,18 +387,24 @@ footer { font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--li
       needs: "nothing — start now",
       open: ["Depth on Rips filtrations, persistent homology, PD/PI", "KD as KL divergence", "Link to the course (GI Tema 1)"] },
     { id: "W7", title: "Extra datasets", team: "experiments",
-      output: "Fashion-MNIST (and similar) results for the memoria",
+      output: "Extra-dataset results for the memoria",
       needs: "W4",
-      open: ["Which datasets besides Fashion-MNIST", "Full or reduced grid"] },
+      open: ["Which datasets (MNIST sanity check? CIFAR-100?)", "Full or reduced grid"] },
     { id: "W8", title: "Presentation", team: "story",
       output: "7-minute slides + prep for the professor's questions",
       needs: "W5, W6",
       open: ["Slide format (team decision)"] }
   ];
 
-  var KEY = "topkd-imat-dashboard-v1";
-  var state = { roster: [], assign: {} };
-  WS.forEach(function (w) { state.assign[w.id] = []; });
+  var KEY = "topkd-imat-dashboard-v2";
+  /* Assignment agreed at the team meeting of 2026-11-21. */
+  var DEFAULT = {
+    roster: ["Marcos", "Ahumada", "Mario", "Pedro", "Escobar"],
+    assign: { W1: ["Mario"], W2: ["Mario"], W3: ["Marcos", "Mario"], W4: ["Escobar"],
+              W5: ["Ahumada", "Pedro"], W6: ["Ahumada"], W7: [], W8: ["Pedro"] }
+  };
+  var state = { roster: DEFAULT.roster.slice(), assign: {} };
+  WS.forEach(function (w) { state.assign[w.id] = (DEFAULT.assign[w.id] || []).slice(); });
 
   function load() {
     try {

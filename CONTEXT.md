@@ -66,19 +66,19 @@ _Español_: par de capas
 _Avoid_: tap, matching layer, distillation point
 
 **Class Cluster**:
-The group of points in a Latent Point Cloud that belong to one digit class; at the last Layer Pair a good network shows one per class.
+The group of points in a Latent Point Cloud that belong to one class; at the last Layer Pair a good network shows one per class.
 _Español_: cluster de la clase
-_Avoid_: blob, digit cluster; cúmulo
+_Avoid_: blob; cúmulo
 
 ### Experiment
 
 **Core Dataset**:
-MNIST — the dataset every Condition is run on and the one shown in the presentation.
+CIFAR-10 — the dataset every Condition is run on and the one shown in the presentation.
 _Español_: conjunto principal
 _Avoid_: main dataset, base dataset
 
 **Extension Dataset**:
-A harder dataset of similar format (e.g. Fashion-MNIST) run as extra experiments for the written report only.
+Any other dataset run as extra experiments for the written report only (which ones is W7's call).
 _Español_: conjuntos extra
 _Avoid_: secondary dataset, hard dataset
 

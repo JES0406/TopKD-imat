@@ -1,1 +1,1 @@
-"""TopKD adapted to MNIST-scale tasks with exact persistence images. See docs/plan.md."""
+"""TopKD adapted to CIFAR-10 with exact persistence images. See docs/plan.md."""

@@ -12,9 +12,9 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Contracts between workstreams: [`inte
 
 ## Research question
 
-> On the Core Dataset (MNIST), does adding the Topology Distillation Loss make the Student's latent space take on the Teacher's shape, and does that help accuracy beyond plain KD?
+> On the Core Dataset (CIFAR-10), does adding the Topology Distillation Loss make the Student's latent space take on the Teacher's shape, and does that help accuracy beyond plain KD?
 
-**Interpretable** means we can check the topology by eye: at the last Layer Pair, a good network's Latent Point Cloud should show one Class Cluster per digit, which appears as long-lived H0 bars in its Persistence Diagram. So we can see whether a PD is good or bad, and whether a Student's PD resembles the Teacher's.
+**Interpretable** means we can check the topology by eye: at the last Layer Pair, a good network's Latent Point Cloud should show one Class Cluster per class (10 classes), which appears as long-lived H0 bars in its Persistence Diagram. So we can see whether a PD is good or bad, and whether a Student's PD resembles the Teacher's.
 
 Two kinds of results:
 
@@ -42,54 +42,62 @@ Per dataset and per seed:
 
 = **14 runs** per dataset per seed. *Pretrained* means the Student starts from weights found online; *scratch* means random initialisation.
 
-Expected highlight: **Top × Label-free**. The Topology Distillation Loss cannot tell the Student which cluster is which digit (a PD is unchanged if clusters swap), so the Student should learn the right *shape* with no class assignment; the Probe Head then measures whether that shape plus a trained classification head is enough.
+Expected highlight: **Top × Label-free**. The Topology Distillation Loss cannot tell the Student which cluster is which class (a PD is unchanged if clusters swap), so the Student should learn the right *shape* with no class assignment; the Probe Head then measures whether that shape plus a trained classification head is enough.
 
 Datasets:
 
-- **Core Dataset** — MNIST: full grid; used in the presentation.
-- **Extension Datasets** — Fashion-MNIST and other similar datasets: extra runs for the memoria only.
+- **Core Dataset** — CIFAR-10: full grid; used in the presentation. Chosen over MNIST at the 2026-11-21 meeting ([ADR 0002](adr/0002-cifar10-core-dataset.md)).
+- **Extension Datasets** — extra runs for the memoria only; which ones is W7's call (see W7).
 
 ## Workstreams
 
 Each workstream has one clear output. "Needs" lists only what it must wait for; anything can start against the stubs in `tests/contracts/`.
 
 ### W1 — Data & Teacher
+- **Owner:** Mario
 - **Output:** dataset loaders (Core + Extension) and a Teacher checkpoint that satisfies the Model interface.
 - **Needs:** nothing.
 - **Open questions:** Teacher architecture and depth (~25 layers in the initial idea); download a pretrained Teacher or train it ourselves; whether the From-scratch/Pretrained axis also applies to the Teacher; DagsHub or HF for storing the checkpoint.
 
 ### W2 — Student
+- **Owner:** Mario
 - **Output:** Student definition(s) satisfying the Model interface, and pretrained Student weights.
 - **Needs:** W1 (Teacher depth, to fix the Layer Pairs).
 - **Open questions:** architecture and depth (~5 layers); Layer Pair mapping; where to find pretrained weights online (they fix the architecture); handling different latent dimensions between Teacher and Student.
 
 ### W3 — Topology Distillation Loss
+- **Owners:** Marcos, Mario
 - **Output:** `topology_loss(teacher_cloud, student_cloud)` satisfying the Loss interface.
 - **Needs:** nothing (prototype on random clouds). Highest-risk workstream — start first.
 - **Open questions:** **how gradients reach the Student through an Exact PI** (library PIs are not differentiable by themselves); which library (gudhi, ripser/persim, giotto-tda); homology dimensions (H0 only, as the paper's default, or also H1); PI settings (resolution, σ, weight function); scale normalisation of the clouds; batch size vs cost per step.
 
 ### W4 — Training & experiment grid
+- **Owner:** Escobar
 - **Output:** the results table and the saved Students (Results interface).
 - **Needs:** W1, W2, W3.
 - **Open questions:** loss weights and KD temperature; epochs; number of seeds; Probe Head design; whether and how to use the DGX (e.g. the git-fed job runner already used in another project); logging.
 - **DGX facts (onboarding test, 2026-11-18):** the repo installs and passes `make test` on the DGX (NVIDIA H200 MIG slice, driver 580.196.07, uv 0.12, GNU Make 4.3); the locked torch 2.15 / CUDA 13 build sees the GPU (`torch.cuda.is_available()` → `True NVIDIA H200 MIG 1g.18gb`), so no CUDA 12 pin is needed. The slice (~16 GB) is **shared with another project's job runner** and runs one GPU job at a time, so TopKD training there needs scheduling around it. Unset `UV_PROJECT_ENVIRONMENT` before `make install` if your shell exports it.
 
 ### W5 — Analysis & visuals
+- **Owners:** Ahumada, Pedro
 - **Output:** figures and tables for the memoria and the slides.
 - **Needs:** W4 (can start on the Teacher alone as soon as W1 lands).
 - **Open questions:** which `topology_distance` to report (with W3: bottleneck, Wasserstein, PI distance…); projection method (UMAP or other); which few figures carry the 7-minute story.
 
 ### W6 — Theory
+- **Owner:** Ahumada
 - **Output:** the memoria's background sections.
 - **Needs:** nothing.
 - **Open questions:** how deep to go into Rips filtrations, persistent homology, PDs/PIs and KD as KL divergence; how to tie it to the course (GI Tema 1).
 
 ### W7 — Extension Datasets
+- **Owner:** *unassigned* (not given out at the 2026-11-21 meeting; optional — memoria only)
 - **Output:** Extension Dataset results for the memoria.
 - **Needs:** W4.
-- **Open questions:** which datasets besides Fashion-MNIST; a reduced grid or the full one.
+- **Open questions:** which datasets (e.g. MNIST / Fashion-MNIST as an easier sanity check, CIFAR-100 as the paper's setting); a reduced grid or the full one.
 
 ### W8 — Presentation
+- **Owner:** Pedro
 - **Output:** 7-minute slides and preparation for the professor's questions.
 - **Needs:** W5, W6.
 - **Open questions:** slide format (LaTeX or other — to be decided by the team).
@@ -109,16 +117,26 @@ graph LR
   W6[W6 Theory] --> W8
 ```
 
-Critical path: **W1/W2 + W3 → W4 → W5**. There are no internal dates; the interfaces and stubs exist so that nobody has to wait for an upstream workstream to start.
+Critical path: **W1/W2 + W3 → W4 → W5**. Mario is on W1, W2 and W3, so every input to W4 runs through one person; W3 is shared with Marcos to spread that load. There are no internal dates; the interfaces and stubs exist so that nobody has to wait for an upstream workstream to start.
 
 ## Subteams
 
 | Subteam | Workstreams | Folder(s) | People |
 |---|---|---|---|
-| **Models** | W1, W2 | `src/topkd_imat/data/`, `src/topkd_imat/models/` | 1–2 |
-| **Topology** | W3 | `src/topkd_imat/topology/` | 1 |
-| **Experiments** | W4, W7 | `src/topkd_imat/training/` | 1 |
-| **Story** | W5, W6, W8 | `src/topkd_imat/analysis/`, `report/`, `slides/` | 1–2 |
+| **Models** | W1, W2 | `src/topkd_imat/data/`, `src/topkd_imat/models/` | Mario |
+| **Topology** | W3 | `src/topkd_imat/topology/` | Marcos, Mario |
+| **Experiments** | W4, W7 | `src/topkd_imat/training/` | Escobar (W7 unassigned) |
+| **Story** | W5, W6, W8 | `src/topkd_imat/analysis/`, `report/`, `slides/` | Ahumada, Pedro |
+
+Assigned at the team meeting of 2026-11-21:
+
+| Person | Workstreams |
+|---|---|
+| Marcos | W3 Topology loss |
+| Ahumada | W5 Analysis & visuals · W6 Theory |
+| Mario | W1 Data & Teacher · W2 Student · W3 Topology loss |
+| Pedro | W5 Analysis & visuals · W8 Presentation |
+| Escobar | W4 Training & grid |
 
 ## Memoria
 

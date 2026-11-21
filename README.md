@@ -2,7 +2,7 @@
 
 Trabajo final — Geometría de la Información (MIA).
 
-We apply **TopKD** — knowledge distillation that also transfers the *topology* of the Teacher's latent space (Kim et al., ICML 2024, [paper](https://proceedings.mlr.press/v235/kim24aj.html), [code](https://github.com/jekim5418/TopKD)) — to MNIST-scale tasks, computing persistence images exactly with the course's TDA libraries instead of approximating them with RipsNet, so we can *see* whether the Student's latent space takes on the Teacher's shape.
+We apply **TopKD** — knowledge distillation that also transfers the *topology* of the Teacher's latent space (Kim et al., ICML 2024, [paper](https://proceedings.mlr.press/v235/kim24aj.html), [code](https://github.com/jekim5418/TopKD)) — to a small image-classification task (CIFAR-10), computing persistence images exactly with the course's TDA libraries instead of approximating them with RipsNet, so we can *see* whether the Student's latent space takes on the Teacher's shape.
 
 ## Start here
 
