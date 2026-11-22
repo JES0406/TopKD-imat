@@ -26,7 +26,8 @@ __all__ = [
 ]
 
 # Where the trained Teacher / pretrained Student live: a local path or "hf://<user>/<repo>/<file>"
-# (downloaded from the Hugging Face Hub on first use). None = not uploaded yet; until then pass
+# (downloaded from the Hugging Face Hub on first use). Kept None so `make test` does not need
+# the files on every machine. Build them (deterministically) with scripts/build_models.py, then
 # --teacher-checkpoint checkpoints/teacher_resnet56.pt
 # --student-checkpoint checkpoints/student_resnet8_from_c100_resnet20.pt
 TEACHER_CHECKPOINT: str | None = None

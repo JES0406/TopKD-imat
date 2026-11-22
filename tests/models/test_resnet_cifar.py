@@ -81,6 +81,19 @@ def test_replace_head_changes_only_the_classifier(x):
     assert all(torch.equal(before[k], after[k]) for k in before)
 
 
+def test_seeded_head_is_reproducible_and_leaves_global_rng_alone():
+    a = replace_head(cifar_resnet(8, num_classes=100), 10, seed=0).fc
+    b = replace_head(cifar_resnet(8, num_classes=100), 10, seed=0).fc
+    c = replace_head(cifar_resnet(8, num_classes=100), 10, seed=1).fc
+    assert torch.equal(a.weight, b.weight) and torch.equal(a.bias, b.bias)
+    assert not torch.equal(a.weight, c.weight)
+
+    model = cifar_resnet(8, num_classes=100)
+    state = torch.random.get_rng_state()
+    replace_head(model, 10, seed=0)
+    assert torch.equal(torch.random.get_rng_state(), state)
+
+
 def test_student_checkpoint_round_trips_and_resets_for_scratch(tmp_path, x):
     student = replace_head(prune_depth(cifar_resnet(20, num_classes=100), 1), 10).eval()
     with torch.no_grad():  # stand-in for pretrained weights (fresh BatchNorm is already 1 / 0)

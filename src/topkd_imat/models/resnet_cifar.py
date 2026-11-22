@@ -127,7 +127,14 @@ def prune_depth(model: CifarResNet, blocks_per_stage: int = 1) -> CifarResNet:
     return model
 
 
-def replace_head(model: CifarResNet, num_classes: int) -> CifarResNet:
-    """Swap the classifier for a freshly initialised one with ``num_classes`` outputs."""
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
+def replace_head(model: CifarResNet, num_classes: int, seed: int | None = None) -> CifarResNet:
+    """Swap the classifier for a freshly initialised one with ``num_classes`` outputs.
+
+    With ``seed`` the new head's random weights are the same on every machine; the global
+    random state is left untouched.
+    """
+    with torch.random.fork_rng(devices=[]):
+        if seed is not None:
+            torch.manual_seed(seed)
+        model.fc = nn.Linear(model.fc.in_features, num_classes)
     return model

@@ -58,7 +58,7 @@ Each workstream has one clear output. "Needs" lists only what it must wait for; 
 - **Output:** dataset loaders (Core + Extension) and a Teacher checkpoint that satisfies the Model interface.
 - **Needs:** nothing.
 - **Open questions:** Teacher architecture and depth (~25 layers in the initial idea); download a pretrained Teacher or train it ourselves; whether the From-scratch/Pretrained axis also applies to the Teacher; DagsHub or HF for storing the checkpoint.
-- **Proposed** ([ADR 0003](adr/0003-resnet56-teacher-pruned-resnet8-student.md), pending team review): downloaded CIFAR-10 ResNet-56 (94.37 %), not trained by us; pretrained only (no scratch Teacher); HF Hub for the checkpoint. Dataset loaders: still the provisional ones in `training/data.py`.
+- **Proposed** ([ADR 0003](adr/0003-resnet56-teacher-pruned-resnet8-student.md), pending team review): downloaded CIFAR-10 ResNet-56 (94.37 %), not trained by us; pretrained only (no scratch Teacher); no checkpoint storage needed, `scripts/build_models.py` rebuilds both models identically on any machine. Dataset loaders: still the provisional ones in `training/data.py`.
 
 ### W2 — Student
 - **Owner:** Mario

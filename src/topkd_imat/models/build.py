@@ -9,6 +9,8 @@ Decisions and their reasons: docs/adr/0003-resnet56-teacher-pruned-resnet8-stude
   reset (``topkd_imat.training.checkpoints.reset_weights``).
 
 Weights are downloaded once into the torch hub cache; the hash in each file name is checked.
+Both builds are deterministic (the Student's new head is seeded), so every machine that runs
+scripts/build_models.py gets identical checkpoints and nothing has to be uploaded.
 """
 
 import torch
@@ -33,6 +35,7 @@ UPSTREAM_NORMALIZATION = {
 TEACHER_DEPTH = 56
 STUDENT_SOURCE_DEPTH = 20
 STUDENT_BLOCKS_PER_STAGE = 1  # -> ResNet-8
+STUDENT_HEAD_SEED = 0  # the fresh 10-class head is the only random part of either model
 
 
 def load_upstream(dataset: str, depth: int, progress: bool = True) -> CifarResNet:
@@ -50,8 +53,11 @@ def build_teacher(progress: bool = True) -> CifarResNet:
     return load_upstream("cifar10", TEACHER_DEPTH, progress).eval()
 
 
-def build_student(progress: bool = True) -> CifarResNet:
-    """ResNet-8 pruned from the CIFAR-100 ResNet-20, with a fresh 10-class head."""
+def build_student(progress: bool = True, seed: int = STUDENT_HEAD_SEED) -> CifarResNet:
+    """ResNet-8 pruned from the CIFAR-100 ResNet-20, with a fresh 10-class head.
+
+    The head is the only random part; ``seed`` makes it identical on every machine.
+    """
     model = load_upstream("cifar100", STUDENT_SOURCE_DEPTH, progress)
     prune_depth(model, STUDENT_BLOCKS_PER_STAGE)
-    return replace_head(model, num_classes=10)
+    return replace_head(model, num_classes=10, seed=seed)
