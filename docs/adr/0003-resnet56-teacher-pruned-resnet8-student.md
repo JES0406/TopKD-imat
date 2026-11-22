@@ -21,6 +21,19 @@ Inputs are normalised with the Teacher's training statistics, mean (0.4914, 0.48
 
 The two Baseline rows come from `scripts/train_student_baseline.py`, which uses the training code's data split, augmentation and recipe but skips the Teacher's forward pass so it runs on a laptop CPU; the definitive Baseline numbers are the grid's (W4).
 
+## Alternative under discussion: heal the pruned ResNet-8 on CIFAR-100
+
+Standard practice after pruning is to retrain the pruned network so its remaining blocks fit together again. `scripts/heal_student_cifar100.py` retrains the pruned ResNet-8 on CIFAR-100 (30 epochs, SGD lr 0.05 cosine, batch 128; ~4 min on a GPU) before the 10-class head is attached (`build_student(healed_weights=...)`). It still never sees CIFAR-10 labels. Measured on one seed, on a GPU:
+
+| | CIFAR-100 test | CIFAR-10 Baseline (CE only, 30 epochs) |
+|---|---|---|
+| Pruned ResNet-8, healed (online start) | 57.45 % | **85.63 %** |
+| Same recipe from random weights (reference) | 52.88 % | — |
+| Pruned ResNet-8, not healed (current *pretrained*) | 1.29 % | 83.52 % |
+| *Scratch* | — | 83.17 % |
+
+The healed *pretrained* Student is a working network (the online start is worth +4.6 points on CIFAR-100 over random weights), learns CIFAR-10 much faster (73 % validation accuracy after one epoch vs 53 % / 47 %) and ends ~2 points above both other starts, so the *pretrained*/*scratch* axis would measure something. The gap to the Teacher stays ~9 points. The same seed gave 84.20 % / 83.52 % on a CPU for the non-healed / scratch runs, so differences under ~0.7 points are noise here. Cost: the healed weights come from our own training, which is seeded but not bit-identical across hardware, so they should be built once on the training machine (the DGX) and used by every run there. Not adopted yet: `build_student()` still returns the non-healed Student until the team decides.
+
 ## Consequences
 
 - *Pretrained* keeps the plan's meaning (weights found online), but pruning to one block per stage destroys most of what the source network computed (5.8 % on its own CIFAR-100 test set even with recalibrated BatchNorm). The *pretrained* Student starts from partly useful early filters, not from a working network; the *scratch*/*pretrained* axis measures how much that start helps. In the Baseline check it helped early (79 % vs 61–71 % validation accuracy at epoch 12) but only by 0.7 points at the end (one seed, likely within noise). Train and validation accuracy stay close (86 % / 85 %), so the ResNet-8 is limited by capacity, not overfitting.

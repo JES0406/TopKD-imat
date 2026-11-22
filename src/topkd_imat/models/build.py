@@ -53,11 +53,18 @@ def build_teacher(progress: bool = True) -> CifarResNet:
     return load_upstream("cifar10", TEACHER_DEPTH, progress).eval()
 
 
-def build_student(progress: bool = True, seed: int = STUDENT_HEAD_SEED) -> CifarResNet:
+def build_student(
+    progress: bool = True, seed: int = STUDENT_HEAD_SEED, healed_weights=None
+) -> CifarResNet:
     """ResNet-8 pruned from the CIFAR-100 ResNet-20, with a fresh 10-class head.
 
     The head is the only random part; ``seed`` makes it identical on every machine.
+    ``healed_weights`` (experimental, scripts/heal_student_cifar100.py): a state_dict of the
+    pruned ResNet-8 retrained on CIFAR-100, loaded before the head is replaced.
     """
     model = load_upstream("cifar100", STUDENT_SOURCE_DEPTH, progress)
     prune_depth(model, STUDENT_BLOCKS_PER_STAGE)
+    if healed_weights is not None:
+        state = torch.load(healed_weights, map_location="cpu", weights_only=True)
+        model.load_state_dict(state, strict=True)
     return replace_head(model, num_classes=10, seed=seed)
