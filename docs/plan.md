@@ -75,7 +75,15 @@ Each workstream has one clear output. "Needs" lists only what it must wait for; 
 - **Owner:** Escobar
 - **Output:** the results table and the saved Students (Results interface).
 - **Needs:** W1, W2, W3.
-- **Open questions:** loss weights and KD temperature; epochs; number of seeds; Probe Head design; whether and how to use the DGX (e.g. the git-fed job runner already used in another project); logging.
+- **Decided (2026-11-22; code in `src/topkd_imat/training/`):**
+  - *Grid:* per Initialisation, label-supervised × 4 Conditions and label-free × {KD, Top, KD+Top} = 7 runs. Large pretrained Student → `pretrained` only; small one → `pretrained` and `scratch` (scratch = the same Student with `reset_parameters()`). Baseline and KD run without W3 (`grid --skip-top`).
+  - *Loss:* CE (label-supervised) + KD as in the TopKD code (T = 4, × T², weight 1) + `w_top` × the mean over Layer Pairs of `topology_loss`. The Teacher is frozen.
+  - *Optimiser:* SGD, momentum 0.9, weight decay 5e-4, batch 64; lr 0.1 from scratch and 0.01 to finetune, ÷10 at 62.5/75/87.5 % of the epochs; validation on a fixed 5k slice of the training set.
+  - *Seeds:* one.
+  - *Probe Head:* only for Top × label-free (KD trains the head otherwise). It is linear, fitted with L-BFGS on frozen last-Layer-Pair features.
+  - *Logging:* `metrics.csv` and TensorBoard per run. No job runner on the DGX; runs are started by hand, and the grid resumes where it stopped.
+  - *`topology_distance`:* NaN during training, filled afterwards from the saved clouds (`training.fill_distance`).
+- **Open questions:** number of epochs and `w_top`, once W3 gives the cost per batch of 64 (if Top needs fewer epochs than Baseline/KD, retrain those or report different epochs); swap the provisional CIFAR-10 loader for W1's `topkd_imat.data` when it lands.
 - **DGX facts (onboarding test, 2026-11-18):** the repo installs and passes `make test` on the DGX (NVIDIA H200 MIG slice, driver 580.196.07, uv 0.12, GNU Make 4.3); the locked torch 2.15 / CUDA 13 build sees the GPU (`torch.cuda.is_available()` → `True NVIDIA H200 MIG 1g.18gb`), so no CUDA 12 pin is needed. The slice (~16 GB) is **shared with another project's job runner** and runs one GPU job at a time, so TopKD training there needs scheduling around it. Unset `UV_PROJECT_ENVIRONMENT` before `make install` if your shell exports it.
 
 ### W5 — Analysis & visuals
