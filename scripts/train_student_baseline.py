@@ -47,16 +47,16 @@ def main() -> None:
     p.add_argument("--num-workers", type=int, default=2)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument(
-        "--healed-weights",
-        default=None,
-        help="pretrained = pruned ResNet-8 healed on CIFAR-100 (scripts/heal_student_cifar100.py)",
+        "--not-healed",
+        action="store_true",
+        help="pretrained = pruned ResNet-8 not retrained on CIFAR-100 (the earlier Student)",
     )
     args = p.parse_args()
     if args.threads:
         torch.set_num_threads(args.threads)
 
     seed_everything(args.seed)
-    model = build_student(progress=False, healed_weights=args.healed_weights)
+    model = build_student(progress=False, healed=not args.not_healed)
     if args.init == "scratch":
         reset_weights(model)
     model = model.to(args.device)
@@ -69,7 +69,7 @@ def main() -> None:
 
     out = Path("runs/student_baseline")
     out.mkdir(parents=True, exist_ok=True)
-    init = f"{args.init}-healed" if args.healed_weights else args.init
+    init = f"{args.init}-not-healed" if args.not_healed else args.init
     path = out / f"{init}_lr{lr}_e{args.epochs}_s{args.seed}.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)

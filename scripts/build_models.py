@@ -20,7 +20,7 @@ from topkd_imat.training.contracts import check_model_pair
 
 FILES = {
     "teacher": "teacher_resnet56.pt",
-    "student": "student_resnet8_from_c100_resnet20.pt",
+    "student": "student_resnet8_healed.pt",
 }
 
 

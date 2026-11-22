@@ -1,7 +1,12 @@
-"""Experiment: prune the CIFAR-100 ResNet-20 to ResNet-8, then retrain it on CIFAR-100
-("healing", standard after pruning) so the pretrained Student is a working network again.
+"""How the pretrained Student's weights were made: prune the CIFAR-100 ResNet-20 to ResNet-8,
+then retrain it on CIFAR-100 ("healing", standard after pruning) so it works again.
 
     uv run python scripts/heal_student_cifar100.py --epochs 30
+
+The file this produced (seed 0, RTX 2060, 57.45 % CIFAR-100 test) is published on the Hugging
+Face Hub and pinned in topkd_imat/models/build.py (HEALED_STUDENT); every run uses that file.
+Re-running gives an equally good but not bit-identical one (floating-point order differs
+across hardware), so do not replace the published file without telling the team.
 
 Keeps the original 100-class head during healing; the 10-class head for CIFAR-10 is attached
 later by build_student. Uses CIFAR-100 only, so the Student still never sees CIFAR-10 labels.

@@ -65,7 +65,7 @@ Each workstream has one clear output. "Needs" lists only what it must wait for; 
 - **Output:** Student definition(s) satisfying the Model interface, and pretrained Student weights.
 - **Needs:** W1 (Teacher depth, to fix the Layer Pairs).
 - **Open questions:** architecture and depth (~5 layers); Layer Pair mapping; where to find pretrained weights online (they fix the architecture); handling different latent dimensions between Teacher and Student.
-- **Decided** ([ADR 0003](adr/0003-resnet56-teacher-pruned-resnet8-student.md), accepted 2026-11-22): ResNet-8 depth-pruned from the CIFAR-100 ResNet-20; three Layer Pairs, stage *k* ↔ stage *k*, dims 16/32/64 in both networks (no projection needed).
+- **Decided** ([ADR 0003](adr/0003-resnet56-teacher-pruned-resnet8-student.md), accepted 2026-11-22): ResNet-8 depth-pruned from the CIFAR-100 ResNet-20 and retrained on CIFAR-100 (weights on the HF Hub, `MarioAlonso7/topkd`); three Layer Pairs, stage *k* ↔ stage *k*, dims 16/32/64 in both networks (no projection needed).
 
 ### W3 — Topology Distillation Loss
 - **Owners:** Marcos, Mario

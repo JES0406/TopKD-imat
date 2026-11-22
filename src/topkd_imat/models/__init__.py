@@ -3,7 +3,8 @@
 Owner: Models subteam (W1, W2).
 Provides the Model interface (docs/interfaces.md #1): ``logits, features = model(x)``.
 
-Teacher: ResNet-56 (CIFAR-10). Student: ResNet-8 pruned from a CIFAR-100 ResNet-20.
+Teacher: ResNet-56 (CIFAR-10). Student: ResNet-8 pruned from a CIFAR-100 ResNet-20 and
+retrained on CIFAR-100 (weights on the Hugging Face Hub, MarioAlonso7/topkd).
 Three Layer Pairs, one per stage (dims 16, 32, 64 in both networks). See
 docs/adr/0003-resnet56-teacher-pruned-resnet8-student.md and ``build.py``.
 
@@ -34,7 +35,7 @@ __all__ = [
 # (downloaded from the Hugging Face Hub on first use). Kept None so `make test` does not need
 # the files on every machine. Build them (deterministically) with scripts/build_models.py, then
 # --teacher-checkpoint checkpoints/teacher_resnet56.pt
-# --student-checkpoint checkpoints/student_resnet8_from_c100_resnet20.pt
+# --student-checkpoint checkpoints/student_resnet8_healed.pt
 TEACHER_CHECKPOINT: str | None = None
 STUDENT_CHECKPOINT: str | None = None
 
