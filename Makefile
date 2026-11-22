@@ -1,10 +1,13 @@
-.PHONY: install test lint format push
+.PHONY: install test test-e2e lint format push
 
 install:  ## Create/update the virtual environment from uv.lock
 	uv sync
 
-test:  ## Run the whole test suite (what "main always runs" means)
+test:  ## Run the test suite (what "main always runs" means; e2e tests excluded)
 	uv run pytest
+
+test-e2e:  ## Run the slow end-to-end tests (whole grid on a tiny model and fake data)
+	uv run pytest -m e2e
 
 lint:  ## Check style (recommended, not required for pushing)
 	uv run ruff check .
