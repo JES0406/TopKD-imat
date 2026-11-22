@@ -11,7 +11,7 @@ The Topology Distillation Loss uses **H0 only**. At the last Layer Pair the shap
 1. Divide each cloud by its own mean pairwise Euclidean distance, so the loss compares shape, not scale (the Teacher's clouds are ~4× larger than an untrained Student's, ADR 0003). Features are not normalised per vector.
 2. Compute the n − 1 finite H0 deaths; the infinite bar is dropped.
 3. Build the Persistence Image: Gaussians centred at each death, weighted linearly by persistence (`w(p) = p`, as defined in GI Tema 1, pp. 50–51), evaluated on a 1-D grid of **100 bins** with **σ = 2 bin widths**; total mass is not normalised.
-4. The grid range is fixed **per Layer Pair**, computed once from the Teacher's normalised deaths over a few batches (maximum + 10 %), and kept constant during training.
+4. The grid range is fixed: **[0, 2] for every Layer Pair**. The plan was one range per Layer Pair computed from the Teacher, but the Loss interface does not tell the loss which pair a call belongs to. The normalised Teacher deaths never exceeded 1.50 at any pair (200 batches, random 64 or balanced 80), and the margin up to 2 leaves room for the Student's outliers: a Student death beyond the grid gets no gradient.
 5. Loss = MSE between the Teacher's and the Student's Persistence Images.
 
 The total topology term is the plain mean over the three Layer Pairs, as already implemented in W4 (`w_top` × mean).
@@ -30,7 +30,7 @@ We considered using the Wasserstein-2 distance between H0 diagrams directly as t
 - H0 sees only the scales at which points merge, not the shape of each cluster or which cluster is near which. Two clouds with the same MST edge lengths have the same Persistence Image; this is a limitation to state in the memoria.
 - At the first two Layer Pairs there are no Class Clusters, so the loss there matches distance distributions with no visual interpretation (as ADR 0001 anticipated).
 - Cost: the topology term adds ~4.5–6 ms per batch on GPU for the three Layer Pairs (mostly the GPU→CPU copy for the MST), roughly doubling a Student step; memory is negligible.
-- Deaths shrink as the batch grows, so the grid ranges must be computed from the Teacher with the final batch recipe (training split, augmentation, 80 balanced). On the test set without augmentation they are ~1.42 / 1.32 / 1.00.
+- Deaths shrink as the batch grows. On the test set without augmentation, the maximum normalised Teacher death with balanced batches of 80 is 1.29 / 1.20 / 0.91 (Layer Pairs 0 / 1 / 2), well inside [0, 2]; it has not been checked on the training split with augmentation.
 - No clear jump between the 9th and 10th longest death appears in the Teacher's last pair (median relative gap ~3 %), although cutting the 9 longest edges leaves class-pure groups (purity ~0.85). The loss sees the Class Clusters through the distribution of merge scales, not as a count of 10.
 - For tuning `w_top`: the Teacher-vs-Teacher Persistence Image MSE between batches at the last pair is ~0.53, the noise floor a Student loss cannot go below.
 - W4 needs a class-balanced batch sampler for the training split (classes are not exactly balanced after the validation split) and must decide whether to keep the epoch count or scale the learning-rate schedule by steps.

@@ -1,7 +1,6 @@
 import math
 
 import numpy as np
-import pytest
 
 from topkd_imat.training.fill_distance import fill
 from topkd_imat.training.grid import main, plan_runs
@@ -60,9 +59,8 @@ def test_fill_distance_uses_the_last_layer_pair(tmp_path):
     assert seen[0] == ((6, 4), (6, 3))
 
 
-def test_fill_distance_leaves_the_table_alone_until_the_distance_exists(tmp_path):
+def test_fill_distance_with_the_real_topology_distance_fills_every_row(tmp_path):
     _fake_runs_dir(tmp_path)
-    before = (tmp_path / "results.csv").read_text()
-    with pytest.raises(NotImplementedError):
-        fill(tmp_path)
-    assert (tmp_path / "results.csv").read_text() == before
+    assert fill(tmp_path) == 3
+    distances = [r["topology_distance"] for r in read_rows(tmp_path / "results.csv")]
+    assert all(math.isfinite(d) and d >= 0 for d in distances)
