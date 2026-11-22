@@ -12,7 +12,7 @@ Inputs are normalised with the Teacher's training statistics, mean (0.4914, 0.48
 
 ## Measurements
 
-Seed 0. Baselines: cross-entropy only, 30 epochs, the training code's split, augmentation and recipe (lr 0.01 *pretrained*, 0.1 *scratch*), run with `scripts/train_student_baseline.py`, which skips the Teacher's forward pass; the definitive Baseline numbers are the grid's (W4).
+Seed 0. Baselines: cross-entropy only, 30 epochs, the training code's split, augmentation and recipe (lr 0.01 *pretrained*, 0.1 *scratch*), run with `scripts/train_student_baseline.py`, which skips the Teacher's forward pass; the definitive Baseline numbers are the grid's (W4). Per-epoch logs of the GPU runs: [`results/w2_student/`](../../results/w2_student/).
 
 | | CIFAR-100 test | CIFAR-10 test |
 |---|---|---|

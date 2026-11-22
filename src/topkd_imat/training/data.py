@@ -1,4 +1,5 @@
-"""Provisional data loaders, until the Models subteam's ``topkd_imat.data`` lands.
+"""Data loaders for training: the project's definitive loaders (agreed 2026-11-22; there is
+no separate ``topkd_imat.data``).
 
 Train split: random crop + horizontal flip. Validation: a fixed 5k slice of the training
 set (same for every run), with test-time transforms. ``fake`` is torchvision's FakeData,

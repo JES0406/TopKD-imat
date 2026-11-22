@@ -84,8 +84,10 @@ Each workstream has one clear output. "Needs" lists only what it must wait for; 
   - *Seeds:* one.
   - *Probe Head:* only for Top × label-free (KD trains the head otherwise). It is linear, fitted with L-BFGS on frozen last-Layer-Pair features.
   - *Logging:* `metrics.csv` and TensorBoard per run. No job runner on the DGX; runs are started by hand, and the grid resumes where it stopped.
+  - *Data:* `training/data.py` is the definitive loader (agreed 2026-11-22; no separate `topkd_imat.data`). Whether to balance batches by class — using the Teacher's predictions, never the labels, so that label-free stays label-free, and in every Condition alike — is open: a `--balanced-batches` flag, compared on the loss's noise once W3's loss works.
+  - *Models:* built with `topkd_imat.models.build_teacher()` / `build_student()` unless a checkpoint path is given; each run's `config.json` records which (`teacher_source`, `student_source`).
   - *`topology_distance`:* NaN during training, filled afterwards from the saved clouds (`training.fill_distance`).
-- **Open questions:** number of epochs and `w_top`, once W3 gives the cost per batch of 64 (if Top needs fewer epochs than Baseline/KD, retrain those or report different epochs); swap the provisional CIFAR-10 loader for W1's `topkd_imat.data` when it lands.
+- **Open questions:** number of epochs and `w_top`, once W3 gives the cost per batch of 64 (if Top needs fewer epochs than Baseline/KD, retrain those or report different epochs).
 - **DGX facts (onboarding test, 2026-11-18):** the repo installs and passes `make test` on the DGX (NVIDIA H200 MIG slice, driver 580.196.07, uv 0.12, GNU Make 4.3); the locked torch 2.15 / CUDA 13 build sees the GPU (`torch.cuda.is_available()` → `True NVIDIA H200 MIG 1g.18gb`), so no CUDA 12 pin is needed. The slice (~16 GB) is **shared with another project's job runner** and runs one GPU job at a time, so TopKD training there needs scheduling around it. Unset `UV_PROJECT_ENVIRONMENT` before `make install` if your shell exports it.
 
 ### W5 — Analysis & visuals

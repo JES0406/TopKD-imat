@@ -3,9 +3,12 @@
     uv run python -m topkd_imat.training.run --condition KD --supervision label-free \\
         --init pretrained --epochs 30
 
-Models come from ``topkd_imat.models`` (TEACHER_CHECKPOINT / STUDENT_CHECKPOINT) unless
-overridden. Everything lands in ``<runs-dir>/``; a run whose row already exists in
-``<runs-dir>/results.csv`` is skipped.
+Models: if a checkpoint is given (--teacher-checkpoint / --student-checkpoint, defaulting to
+TEACHER_CHECKPOINT / STUDENT_CHECKPOINT in ``topkd_imat.models``), that file is loaded;
+otherwise the model is built with ``topkd_imat.models.build_teacher()`` / ``build_student()``
+(deterministic, weights downloaded once). Each run's config.json records which. Everything
+lands in ``<runs-dir>/``; a run whose row already exists in ``<runs-dir>/results.csv`` is
+skipped.
 """
 
 import argparse
@@ -44,6 +47,21 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def get_model(spec: str | None, role: str, device: str | torch.device = "cpu"):
+    """Return ``(model, source)``: the checkpoint ``spec`` if given, else the built model.
+
+    ``source`` says where the model came from, for the run's config.json.
+    """
+    if spec:
+        return load_model(spec, role, device), {"checkpoint": spec}
+    if role == "teacher":
+        return models.build_teacher(progress=False).to(device), {"built": "build_teacher()"}
+    from topkd_imat.models.build import HEALED_STUDENT
+
+    source = {"built": "build_student()", "healed_weights": HEALED_STUDENT}
+    return models.build_student(progress=False).to(device), source
+
+
 def main(argv: list[str] | None = None) -> dict | None:
     args = build_parser().parse_args(argv)
     cfg = RunConfig(
@@ -67,8 +85,8 @@ def main(argv: list[str] | None = None) -> dict | None:
         return None
 
     seed_everything(cfg.seed)
-    teacher = load_model(args.teacher_checkpoint, "teacher", args.device)
-    student = load_model(args.student_checkpoint, "student", args.device)
+    teacher, teacher_source = get_model(args.teacher_checkpoint, "teacher", args.device)
+    student, student_source = get_model(args.student_checkpoint, "student", args.device)
     if cfg.init == "scratch":
         reset_weights(student)
     topology_loss = None
@@ -84,8 +102,8 @@ def main(argv: list[str] | None = None) -> dict | None:
         fake_size=args.fake_size,
     )
     extra = {
-        "teacher_checkpoint": args.teacher_checkpoint,
-        "student_checkpoint": args.student_checkpoint,
+        "teacher_source": teacher_source,
+        "student_source": student_source,
         "input_normalization": models.INPUT_NORMALIZATION,
         "topology_loss": type(topology_loss).__name__ if topology_loss is not None else None,
     }
