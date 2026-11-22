@@ -5,7 +5,9 @@ description = "TopKD (topological knowledge distillation) adapted to CIFAR-10 wi
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "huggingface-hub>=2.4.0",
     "numpy",
+    "tensorboard>=2.21.0",
     "torch",
     "torchvision",
 ]

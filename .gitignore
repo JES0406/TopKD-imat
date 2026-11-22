@@ -11,6 +11,8 @@ __pycache__/
 /data/
 /checkpoints/
 /artifacts/
+# Training outputs (W4); promote finished tables/figures to results/ by hand
+/runs/
 *.pt
 *.pth
 *.ckpt
