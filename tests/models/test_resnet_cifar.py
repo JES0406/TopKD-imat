@@ -15,6 +15,12 @@ from topkd_imat.training.checkpoints import load_model, reset_weights
 from topkd_imat.training.contracts import check_model_pair
 
 
+def test_package_exports_the_builders_training_calls():
+    from topkd_imat import models
+
+    assert callable(models.build_teacher) and callable(models.build_student)
+
+
 @pytest.fixture
 def x():
     return torch.randn(4, 3, 32, 32)

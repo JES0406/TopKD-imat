@@ -7,12 +7,15 @@ Teacher: ResNet-56 (CIFAR-10). Student: ResNet-8 pruned from a CIFAR-100 ResNet-
 Three Layer Pairs, one per stage (dims 16, 32, 64 in both networks). See
 docs/adr/0003-resnet56-teacher-pruned-resnet8-student.md and ``build.py``.
 
-The constants below tell Experiments which models to train with. Each checkpoint is a whole
-model saved with ``torch.save(model, path)`` (not a state_dict); its class must live in this
-package and keep its name, so ``torch.load(path, weights_only=False)`` can rebuild it.
-Build both with ``uv run python scripts/build_models.py`` (writes checkpoints/).
+``build_teacher()`` and ``build_student()`` construct both models in seconds on any machine
+(they download the upstream weights once and are deterministic); training uses them when no
+checkpoint path is given. The constants below are for training from a saved file instead:
+each checkpoint is a whole model saved with ``torch.save(model, path)`` (not a state_dict);
+its class must live in this package and keep its name, so
+``torch.load(path, weights_only=False)`` can rebuild it (``scripts/build_models.py`` writes them).
 """
 
+from topkd_imat.models.build import build_student, build_teacher
 from topkd_imat.models.resnet_cifar import CifarResNet, cifar_resnet, prune_depth, replace_head
 
 __all__ = [
@@ -20,6 +23,8 @@ __all__ = [
     "STUDENT_CHECKPOINT",
     "TEACHER_CHECKPOINT",
     "CifarResNet",
+    "build_student",
+    "build_teacher",
     "cifar_resnet",
     "prune_depth",
     "replace_head",

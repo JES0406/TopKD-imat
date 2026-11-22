@@ -1,6 +1,6 @@
 # ResNet-56 Teacher, ResNet-8 Student pruned from a CIFAR-100 ResNet-20
 
-*Status: proposed by W1/W2, pending team review.*
+*Status: accepted by the team on 2026-11-22 (Teacher, Student architecture, Layer Pairs); the pretrained weights are still open, see below.*
 
 The Teacher is the CIFAR-10 **ResNet-56** released by [chenyaofo/pytorch-cifar-models](https://github.com/chenyaofo/pytorch-cifar-models) (94.37 % test accuracy, reproduced exactly here; 0.86 M parameters). The Student is a **ResNet-8**: the CIFAR-100 ResNet-20 from the same repository, depth-pruned by keeping the first BasicBlock of each stage, with a fresh 10-class head (0.08 M parameters). The *pretrained* Student is that network as built; the *scratch* Student is the same ResNet-8 with its weights reset. There are **three Layer Pairs**, one per stage (global-average-pooled stage outputs, dims 16 / 32 / 64 in both networks), and the last one is the classifier's input.
 
@@ -32,7 +32,11 @@ Standard practice after pruning is to retrain the pruned network so its remainin
 | Pruned ResNet-8, not healed (current *pretrained*) | 1.29 % | 83.52 % |
 | *Scratch* | — | 83.17 % |
 
-The healed *pretrained* Student is a working network (the online start is worth +4.6 points on CIFAR-100 over random weights), learns CIFAR-10 much faster (73 % validation accuracy after one epoch vs 53 % / 47 %) and ends ~2 points above both other starts, so the *pretrained*/*scratch* axis would measure something. The gap to the Teacher stays ~9 points. The same seed gave 84.20 % / 83.52 % on a CPU for the non-healed / scratch runs, so differences under ~0.7 points are noise here. Cost: the healed weights come from our own training, which is seeded but not bit-identical across hardware, so they should be built once on the training machine (the DGX) and used by every run there. Not adopted yet: `build_student()` still returns the non-healed Student until the team decides.
+The healed *pretrained* Student is a working network (the online start is worth +4.6 points on CIFAR-100 over random weights), learns CIFAR-10 much faster (73 % validation accuracy after one epoch vs 53 % / 47 %) and ends ~2 points above both other starts, so the *pretrained*/*scratch* axis would measure something. The gap to the Teacher stays ~9 points. The same seed gave 84.20 % / 83.52 % on a CPU for the non-healed / scratch runs, so differences under ~0.7 points are noise here. Cost: the healed weights come from our own training, which is seeded but not bit-identical across hardware, so one file must be shared (e.g. on the Hugging Face Hub) or built once on the training machine (the DGX) and used by every run there.
+
+**Team decision (2026-11-22):** the healed Student is preferred — it is real pretraining — if it is wired in by Tuesday 2026-11-24; otherwise the grid runs with the current non-healed Student. Until then `build_student()` returns the non-healed one.
+
+**Deviation from the plan.** The plan defines *pretrained* as "the Student starts from weights found online". Neither Student does exactly that: the non-healed one starts from online weights with two thirds of its blocks removed, and the healed one from those weights retrained by us on CIFAR-100. Report the *pretrained* Condition in the memoria as "initialised from public CIFAR-100 weights, pruned (and retrained on CIFAR-100)", not as downloaded weights.
 
 ## Consequences
 
