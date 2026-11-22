@@ -37,7 +37,15 @@ Each training run appends **one row** to a shared results table (CSV) with these
 | `supervision` | `label-supervised` or `label-free` |
 | `init` | `scratch` or `pretrained` |
 | `seed` | integer |
-| `accuracy` | test accuracy of the Student (with Probe Head when `label-free`) |
-| `topology_distance` | distance between Teacher and Student at the last Layer Pair, on the test set |
+| `accuracy` | test accuracy of the Student, a fraction in [0, 1]. Only `Top` × `label-free` uses a Probe Head (nothing else trains its classifier); `KD` and `KD+Top` without labels keep the head KD trained |
+| `topology_distance` | distance between Teacher and Student at the last Layer Pair, on the test set; `NaN` until filled in from the saved clouds |
 
-Each run also saves, next to its row, the Student checkpoint and the Student's test-set Latent Point Clouds for every Layer Pair, so Story can plot them without re-running training.
+Each run also saves, next to its row, the Student checkpoint and the Student's test-set Latent Point Clouds for every Layer Pair, so Story can plot them without re-running training. Layout (`training/results.py` reads and writes it; `tests/contracts/results_example.csv` is a stub table to build plots against):
+
+```
+<runs dir>/
+  results.csv
+  teacher/clouds_test.npz                 # Teacher clouds: pair_0 ... pair_{k-1}, labels
+  <dataset>_<condition>_<supervision>_<init>_s<seed>/
+    config.json  metrics.csv  tb/  student.pt  clouds_test.npz
+```
