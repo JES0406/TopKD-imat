@@ -70,6 +70,7 @@ Each workstream has one clear output. "Needs" lists only what it must wait for; 
 - **Output:** `topology_loss(teacher_cloud, student_cloud)` satisfying the Loss interface.
 - **Needs:** nothing (prototype on random clouds). Highest-risk workstream — start first.
 - **Open questions:** **how gradients reach the Student through an Exact PI** (library PIs are not differentiable by themselves); which library (gudhi, ripser/persim, giotto-tda); homology dimensions (H0 only, as the paper's default, or also H1); PI settings (resolution, σ, weight function); scale normalisation of the clouds; batch size vs cost per step.
+- **Decided** ([ADR 0004](adr/0004-h0-persistence-image-loss.md), 2026-11-22; code in `src/topkd_imat/topology/`): H0 only; MST on detached distances, deaths read back as `D[i, j]` so gradients reach the Student; each cloud divided by its mean pairwise distance; loss = MSE between 1-D Persistence Images (100 bins over [0, 2], σ = 2 bins, weight w(p) = p). `topology_distance` = Wasserstein-2 between H0 diagrams of the last Layer Pair over fixed test batches (awaiting W5's OK). Proposed to W4: class-balanced batches of 80 (8 per class); cost ~4.5–6 ms per batch on GPU for the three Layer Pairs.
 
 ### W4 — Training & experiment grid
 - **Owner:** Escobar
