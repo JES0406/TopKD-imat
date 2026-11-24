@@ -2,7 +2,7 @@
 
 *Status: decided by the Topology owner (W3, Marcos) on 2026-11-22; the `topology_distance` part awaits Story's (W5) agreement, and the batch composition W4's (Escobar).*
 
-*Update 2026-11-24: as a run option, this loss is replaced by `h0-pi-norm` ([ADR 0006](0006-paper-pi.md)): the same normalised H0 PI, with the grid range, σ and a maximum fitted to the Teacher per Layer Pair. `H0PILoss` stays in the library; the W4 grid results were produced with it (`h0-pi`).*
+*Update 2026-11-24: as a run option, this loss is replaced by `h0-pi-norm` ([ADR 0006](0006-paper-pi.md)): the same normalised H0 PI on the same `[0, 2]` grid (200 bins), with σ and a maximum fitted to the Teacher per Layer Pair. `H0PILoss` stays in the library; the W4 grid results were produced with it (`h0-pi`).*
 
 The Topology Distillation Loss uses **H0 only**. At the last Layer Pair the shape we want to transfer is the Class Clusters, which are H0 information (connected components); H1 adds cost and has no expected shape to check by eye. In a Rips filtration every H0 class is born at 0, and its death times are the edge lengths of the Euclidean minimum spanning tree (MST) of the Latent Point Cloud, so the Persistence Diagram is one-dimensional and its **Persistence Image is a 1-D grid** over persistence.
 

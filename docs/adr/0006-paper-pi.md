@@ -4,17 +4,17 @@ The training runs offer two Topology Distillation Losses (`run --top-loss`):
 
 | `--top-loss` | Loss |
 |---|---|
-| `h0-pi-norm` (default) | MSE between 1-D H0 PIs of normalised clouds, with the grid range, σ and a maximum calibrated on the Teacher per Layer Pair (this ADR) |
+| `h0-pi-norm` (default) | MSE between 1-D H0 PIs of normalised clouds on a fixed `[0, 2]` grid, with σ and a maximum calibrated on the Teacher per Layer Pair (this ADR) |
 | `h0-matched` | MST-edge matching ([ADR 0005](0005-h0-matched-loss.md)) |
 
-`h0-pi-norm` is ADR 0004's loss with the parameters ADR 0004 fixed by hand (grid `[0, 2]`,
-σ = 2 bins, no normalisation of the image) fitted to the Teacher instead, per Layer Pair —
-which was ADR 0004's original plan. ADR 0004's `H0PILoss` (the old `h0-pi`) stays in the
+`h0-pi-norm` is ADR 0004's loss with σ (ADR 0004: 2 bins) and the image's scale (ADR 0004:
+none) fitted to the Teacher per Layer Pair; the grid stays ADR 0004's `[0, 2]`, with 200
+bins instead of 100. ADR 0004's `H0PILoss` (the old `h0-pi`) stays in the
 library and the contract tests, but is no longer a run option.
 
 The calibration follows
 [TopKD's implementation](https://github.com/jekim5418/TopKD/blob/main/ripsnet_utils.py),
-except for the distances (point 1) and the weight (point 2):
+except for the distances (point 1), the weight (point 2) and the grid (point 5):
 
 1. **Normalised distances, not the paper's raw ones.** Each cloud is divided by its mean
    pairwise distance before the MST, as in ADR 0004 (`h0_deaths(cloud)`), for the
@@ -36,22 +36,40 @@ except for the distances (point 1) and the weight (point 2):
    calibration batches **per layer**, then divide both Teacher and Student
    PIs by that same frozen maximum; never divide by the current batch max.
    Without RipsNet this mostly balances the three Layer Pairs.
-5. **Data-driven range:** use the minimum and maximum persistence values across
-   all the Teacher calibration diagrams **for each layer**, rather than `[0,2]`.
-   The bounds are frozen for both Teacher and Student for the full training run.
-   In H0 the birth coordinate is always zero, so only the persistence axis needs
-   minimum/maximum bounds. If the Teacher calibration deaths are all identical,
-   use a minimal positive fallback interval so its width is never zero.
+5. **Fixed grid `[0, 2]`, as in ADR 0004, with 200 bins (`RANGE_MAX`, `BINS` in
+   `paper_pi.py`), not the paper's min-max of the Teacher's diagrams.** In H0 the birth
+   coordinate is always zero, so only the persistence axis needs bounds. σ is floored at
+   one bin width (0.01): the grid is point-sampled, so a narrower Gaussian could fall
+   between two bin centres and vanish. The floor is inactive on CIFAR-10 (σ ≈ 0.03–0.04,
+   3–4 bins) and only catches degenerate Teacher clouds.
 
-The PI is still represented in 1-D with 100 point-sampled bins; the project still uses
+   *Why not the Teacher's min-max.* The paper cuts at the bare minimum and maximum, but it
+   never builds the Student's exact PI: RipsNet maps the Student's cloud to an image and
+   extrapolates however it learned to. Here the Student's exact image is evaluated on the
+   grid, so a Student death more than about 3σ past the grid's edge is invisible: it gets
+   no gradient, and the loss does not penalise it either, although the Teacher has no mass
+   there. On CIFAR-10 the Teacher's normalised deaths lie in about [0.07, 1.04] at every
+   Layer Pair, while a scratch Student's reach about 2 before training. A margin of k σ
+   around the Teacher's min-max was tried: with k = 3 the grid ends near 1.1 and covers
+   only 87 % of a scratch Student's pair-1 deaths (0.12–1.98; 8 batches of 64), and σ is
+   a spacing between neighbouring deaths (≈ 0.36 × their standard deviation for normal
+   data), not a statistical bound on where the Student goes.
+
+   `[0, 2]` needs no data to justify: after normalisation the mean pairwise distance is 1,
+   so an MST edge longer than twice the mean belongs to an isolated point, and deaths are
+   never negative. It covers every Student death measured above. The price is bins the
+   Teacher never fills (above about 1.05), which is why the grid has 200 bins instead of
+   ADR 0004's 100: σ keeps 3–4 bins, as with the Teacher-fitted range.
+
+The PI is still represented in 1-D with point-sampled bins; the project still uses
 exact differentiable MST H0, not the authors' 2-D 20x20 GUDHI PI or their RipsNet
 approximation. Thus this is **not** an exact reproduction of the paper.
 
 ## Why not raw distances
 
 With raw distances every death is a Euclidean length in the network's feature space, so its
-scale is the network's. The grid is fitted to the Teacher, whose trained features are spread
-out; a scratch Student's random features are small and bunched together. Its deaths then fall
+scale is the network's. The raw variant's grid was the Teacher's min-max (point 5), and the
+Teacher's trained features are spread out; a scratch Student's random features are small and bunched together. Its deaths then fall
 below the Teacher's range, only Gaussian tails reach the grid, its image is almost zero and
 so is the gradient. Normalising each cloud removes the absolute scale, so both clouds' deaths
 land in the same range and the loss compares shape.
@@ -99,7 +117,6 @@ uv run python -m topkd_imat.training.grid --inits pretrained scratch --seeds 0 1
 Always retrain a plain KD control under identical seeds and training settings;
 the `--top-loss` option has no effect for conditions without Top.
 
-**Important:** the Student's normalised deaths can still exceed the Teacher's maximum
-(up to 10 % of them at pair 1 for a scratch Student, above); monitor PI coverage. The
-coefficient `w_top=0.1` was tuned on ADR 0004's PI scale and **must be re-tuned**;
+**Important:** a Student death above 2 would still be invisible; none was measured, but
+monitor PI coverage during training. The coefficient `w_top=0.1` was tuned on ADR 0004's PI scale and **must be re-tuned**;
 comparing raw loss numbers with ADR 0004's runs would be misleading.
