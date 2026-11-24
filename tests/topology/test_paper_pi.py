@@ -7,6 +7,8 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from topkd_imat.topology.paper_pi import (
+    BINS,
+    RANGE_MAX,
     PaperH0PILoss,
     PaperPICalibration,
     _fit_one_layer,
@@ -16,13 +18,12 @@ from topkd_imat.topology.paper_pi import (
 
 
 def _centres(spec: PaperPICalibration) -> torch.Tensor:
-    width = (spec.persistence_max - spec.persistence_min) / spec.bins
-    return spec.persistence_min + (torch.arange(spec.bins, dtype=torch.float64) + 0.5) * width
+    return (torch.arange(spec.bins, dtype=torch.float64) + 0.5) * spec.range_max / spec.bins
 
 
 def test_compares_shape_not_scale_and_reaches_the_student():
     teacher = torch.tensor([[0.0], [1.0], [3.0], [7.0]], dtype=torch.float64)
-    spec = PaperPICalibration(0.0, 2.0, 0.1, 1.0, 100, 2)
+    spec = PaperPICalibration(0.1, 1.0, 100, 2)
     # Same shape, twice the scale: the clouds are normalised, so the images are equal.
     scaled = (2 * teacher).clone().requires_grad_(True)
     assert PaperH0PILoss(spec)(teacher, scaled).item() == pytest.approx(0.0, abs=1e-12)
@@ -40,19 +41,19 @@ def test_calibration_is_the_same_for_a_rescaled_teacher_layer():
     loader = DataLoader(TensorDataset(x, torch.zeros(6, dtype=torch.long)), batch_size=3)
     specs = fit_teacher_pi_calibrations(TinyTeacher(), loader, "cpu")
     # TinyTeacher's second layer is the first one times 2: same shape, twice the scale.
-    # On raw distances its range would double; normalised, every parameter is the same.
-    for field in ("persistence_min", "persistence_max", "sigma", "pi_max"):
+    # The clouds are normalised, so sigma and the maximum are the same.
+    for field in ("sigma", "pi_max"):
         assert getattr(specs[1], field) == pytest.approx(getattr(specs[0], field), rel=1e-5)
 
 
 def test_identical_clouds_give_zero_loss():
     cloud = torch.randn(16, 5, dtype=torch.float64)
-    spec = PaperPICalibration(0.0, 5.0, 0.1, 1.0, 100, 1)
+    spec = PaperPICalibration(0.1, 1.0, 100, 1)
     assert PaperH0PILoss(spec)(cloud, cloud.clone()).item() == pytest.approx(0.0, abs=1e-20)
 
 
 def test_weight_is_persistence_not_tanh():
-    spec = PaperPICalibration(0.0, 4.0, 0.05, 2.0, 100, 4)
+    spec = PaperPICalibration(0.05, 2.0, 100, 4, range_max=4.0)
     deaths = torch.tensor([0.5, 3.02], dtype=torch.float64)  # both on bin centres
     pi = paper_pi_1d(deaths, spec)
     gauss = torch.exp(-0.5 * ((_centres(spec)[None, :] - deaths[:, None]) / 0.05) ** 2)
@@ -65,7 +66,7 @@ def test_weight_is_persistence_not_tanh():
 
 
 def test_pi_max_is_frozen_not_recomputed_per_cloud():
-    spec = PaperPICalibration(0.0, 2.0, 0.05, 2.0, 100, 4)
+    spec = PaperPICalibration(0.05, 2.0, 100, 4)
     deaths = torch.tensor([0.4, 1.0, 1.3], dtype=torch.float64)
     once = paper_pi_1d(deaths, spec)
     twice = paper_pi_1d(torch.cat([deaths, deaths]), spec)
@@ -74,18 +75,16 @@ def test_pi_max_is_frozen_not_recomputed_per_cloud():
     torch.testing.assert_close(twice, 2 * once)
     assert twice.max() > 1.0
     # And it uses exactly the calibrated pi_max, not 1.
-    raw = paper_pi_1d(deaths, PaperPICalibration(0.0, 2.0, 0.05, 1.0, 100, 4))
+    raw = paper_pi_1d(deaths, PaperPICalibration(0.05, 1.0, 100, 4))
     torch.testing.assert_close(once, raw / 2.0)
 
 
 def test_teacher_calibration_matches_quantile_and_dataset_max():
     batches = [np.array([0.2, 0.6, 1.0]), np.array([0.1, 0.8, 1.2])]
-    spec = _fit_one_layer(batches, bins=20)
+    spec = _fit_one_layer(batches)
     points = np.concatenate(batches)
     distances = np.abs(points[:, None] - points[None, :]).ravel()
     assert spec.sigma == pytest.approx(np.quantile(distances[distances > 1e-5], 0.2))
-    assert spec.persistence_min == 0.1
-    assert spec.persistence_max == 1.2
     # The max is over every calibration image, so exactly one of them peaks at 1.
     peaks = [paper_pi_1d(torch.from_numpy(d), spec).max().item() for d in batches]
     assert max(peaks) == pytest.approx(1.0)
@@ -95,37 +94,48 @@ def test_teacher_calibration_matches_quantile_and_dataset_max():
 def test_sigma_uses_only_the_first_200_points():
     rng = np.random.default_rng(0)
     first = rng.uniform(0.0, 1.0, 200)
-    batches = [first[:120], first[120:], rng.uniform(50.0, 100.0, 300)]  # far, wide points last
-    spec = _fit_one_layer(batches, bins=20)
+    batches = [first[:120], first[120:], rng.uniform(1.5, 1.9, 300)]  # far, wide points last
+    spec = _fit_one_layer(batches)
     distances = np.abs(first[:, None] - first[None, :]).ravel()
     assert spec.sigma == pytest.approx(np.quantile(distances[distances > 1e-5], 0.2))
-    assert spec.persistence_max > 50.0  # the range, unlike sigma, uses every point
 
 
-def test_pi_grid_range_uses_teacher_diagram_min_max_not_zero_two():
-    # All teacher persistence values lie above 2; a hard-coded [0, 2] grid
-    # would miss the peak and provide virtually no useful signal.
-    batches = [np.array([2.5, 3.1, 4.2]), np.array([2.8, 3.9, 4.0])]
-    spec = _fit_one_layer(batches, bins=128)
-    assert spec.persistence_min == pytest.approx(2.5)
-    assert spec.persistence_max == pytest.approx(4.2)
+def test_grid_is_zero_to_two_with_200_bins_whatever_the_teacher():
+    # Teacher deaths only up to 1.0, as on CIFAR-10: the grid is not cut at that maximum.
+    spec = _fit_one_layer([np.array([0.3, 0.5, 0.7]), np.array([0.4, 0.6, 1.0])])
+    assert (spec.range_max, spec.bins) == (RANGE_MAX, BINS) == (2.0, 200)
+    centres = _centres(spec)
+    assert centres[0] == pytest.approx(0.005) and centres[-1] == pytest.approx(1.995)
 
-    # A Student death is rendered on the SAME fitted teacher range, with no
-    # per-batch recentering, and lands in its expected grid bin.
-    student_deaths = torch.tensor([3.1], dtype=torch.float64, requires_grad=True)
-    pi = paper_pi_1d(student_deaths, spec)
-    width = (spec.persistence_max - spec.persistence_min) / spec.bins
-    peak = spec.persistence_min + (int(pi.argmax()) + 0.5) * width
-    assert abs(peak - 3.1) <= width / 2
-    pi.sum().backward()
-    assert student_deaths.grad is not None
-    assert torch.isfinite(student_deaths.grad).all()
+
+def test_a_student_death_far_beyond_the_teachers_max_is_seen_and_pulled():
+    # A scratch Student's normalised deaths reach about 2 while the Teacher's stop near 1.
+    spec = _fit_one_layer([np.array([0.3, 0.5, 0.7]), np.array([0.4, 0.6, 1.0])])
+    student = torch.tensor([0.5, 1.9], dtype=torch.float64, requires_grad=True)
+    pi = paper_pi_1d(student, spec)
+    width = spec.range_max / spec.bins
+    assert abs((int(pi[100:].argmax()) + 100 + 0.5) * width - 1.9) <= width / 2
+    teacher_pi = paper_pi_1d(torch.tensor([0.5, 0.6], dtype=torch.float64), spec)
+    (pi - teacher_pi).square().mean().backward()
+    assert student.grad[1].abs() > 0  # the outlying death gets a gradient
 
 
 def test_constant_teacher_diagrams_do_not_divide_by_zero():
-    spec = _fit_one_layer([np.array([1.0, 1.0]), np.array([1.0, 1.0])], 16)
-    assert spec.sigma > 0 and spec.pi_max > 0
-    assert spec.persistence_max > spec.persistence_min
+    spec = _fit_one_layer([np.array([1.0, 1.0]), np.array([1.0, 1.0])])
+    assert spec.sigma == pytest.approx(RANGE_MAX / BINS)  # no differences: one bin width
+    assert spec.pi_max > 0
+
+
+def test_sigma_is_never_narrower_than_a_bin():
+    # Deaths 0.001 apart would give sigma 0.001, a tenth of a bin: the Gaussians would fall
+    # between bin centres. The floor keeps every death visible on the grid.
+    batches = [np.array([0.500, 0.501, 0.502, 0.503])]
+    spec = _fit_one_layer(batches)
+    assert spec.sigma == pytest.approx(RANGE_MAX / BINS)
+    off_centre = torch.tensor([0.5], dtype=torch.float64)  # 0.5 lies between two centres
+    # Its nearest centre is half a bin = half a sigma away: the Gaussian there is exp(-1/8).
+    peak = paper_pi_1d(off_centre, spec).max() * spec.pi_max
+    assert peak == pytest.approx(0.5 * np.exp(-0.125), rel=1e-6)
 
 
 class TinyTeacher(nn.Module):
@@ -144,7 +154,7 @@ def test_calibration_returns_one_set_per_layer():
     specs = fit_teacher_pi_calibrations(TinyTeacher(), _loader(), "cpu", max_batches=2)
     assert len(specs) == 2
     assert all(spec.n_clouds == 2 for spec in specs)
-    assert specs[1].persistence_max == pytest.approx(specs[0].persistence_max, rel=1e-5)
+    assert specs[1].sigma == pytest.approx(specs[0].sigma, rel=1e-5)
 
 
 @pytest.mark.parametrize("shuffle", [False, True])

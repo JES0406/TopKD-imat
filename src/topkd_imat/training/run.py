@@ -13,7 +13,8 @@ skipped.
 Topology Distillation Loss (``--top-loss``, Top and KD+Top only):
 
 - ``h0-pi-norm`` (default): the H0 Persistence Image of clouds divided by their mean pairwise
-  distance, with range, sigma and max calibrated on the Teacher's training clouds (ADR 0006);
+  distance on a fixed [0, 2] grid, with sigma and max calibrated on the Teacher's training
+  clouds (ADR 0006);
 - ``h0-matched``: the Student keeps the Teacher's MST edges (ADR 0005).
 
 Run names do not include the loss, so every Top or KD+Top run needs a ``--runs-dir`` of its
