@@ -7,7 +7,9 @@ Provides the Loss interface (docs/interfaces.md #2):
 ``topology_loss`` is an ``H0PILoss``: MSE between the 1-D H0 Persistence Images of the
 Teacher's and the Student's clouds (docs/adr/0004-h0-persistence-image-loss.md).
 ``H0MatchedLoss`` is the variant with correspondence (docs/adr/0005-h0-matched-loss.md);
-pick one by name with ``make_topology_loss`` (``run --top-loss``).
+pick one by name with ``make_topology_loss``. Training runs (``run --top-loss``) offer
+``h0-pi-norm``, the normalised PI calibrated on the Teacher (``paper_pi``, ADR 0006),
+and ``h0-matched``; ``H0PILoss`` is kept as the library default and for the contract tests.
 ``RandomTopLoss`` stays as a placeholder for tests that need a cheap loss.
 tests/contracts/test_loss_contract.py checks whatever is exported here.
 """

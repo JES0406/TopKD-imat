@@ -14,7 +14,7 @@ with D each cloud's pairwise distances divided by their own mean, as in ADR 0004
 
 ## Consequences
 
-- Choose the loss with `run --top-loss h0-pi | h0-matched` (the grid passes the flag through); the default stays `h0-pi`, so existing runs and results are unchanged. `config.json` records the class used. Use a separate `--runs-dir`: run names do not include the loss.
+- Choose the loss with `run --top-loss h0-matched` (the grid passes the flag through); the other option is `h0-pi-norm`, the default ([ADR 0006](0006-paper-pi.md)). `config.json` records the loss used. Use a separate `--runs-dir`: run names do not include the loss.
 - **`w_top` must be retuned.** The matched loss is on a much smaller scale than the PI MSE: on the toy clouds, a random Student scores 43.7 with the PI loss and 0.56 with the matched loss, and a noisy copy of the Teacher 4.4 against 0.015. `w_top` 0.1 would make the topology term almost vanish; start with `w_top` 1 and compare at least two values.
 - Cost is the same as `H0PILoss` (~2.5 ms per Layer Pair and batch of 64 on CPU): the same two MSTs, and no image to build.
 - It is a deviation from the paper beyond ADR 0001's: the loss no longer compares Persistence Images and uses the pairing of images across networks, which TopKD does not. Report it in the memoria as our variant, with Moor et al. as its source.

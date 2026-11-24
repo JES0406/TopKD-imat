@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+import pytest
 
 from topkd_imat.training.fill_distance import fill
 from topkd_imat.training.grid import main, plan_runs
@@ -30,6 +31,13 @@ def test_grid_skips_runs_already_in_the_table(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "1 already done, 2 to go" in out
     assert f"[done] {run_name(done)}" in out
+
+
+def test_grid_with_top_refuses_the_shared_runs_dir_before_any_run(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit, match="runs-dir of its own loss"):
+        main(["--dry-run"])
+    assert main(["--skip-top", "--dry-run"]) == 0  # without Top the shared folder is fine
 
 
 def _fake_runs_dir(tmp_path, n_pairs=2):
