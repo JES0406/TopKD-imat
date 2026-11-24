@@ -1,0 +1,47 @@
+{
+  "dataset": "CIFAR-10",
+  "condition": "Baseline",
+  "supervision": "label-supervised",
+  "init": "scratch",
+  "seed": 1,
+  "epochs": 60,
+  "lr": null,
+  "batch_size": 64,
+  "momentum": 0.9,
+  "weight_decay": 0.0005,
+  "kd_T": 4.0,
+  "w_ce": 1.0,
+  "w_kd": 1.0,
+  "w_top": 0.1,
+  "runs_dir": "runs_final",
+  "effective_lr": 0.1,
+  "layer_pairs": 3,
+  "torch": "2.15.0+cu132",
+  "git_commit": "1ca8d620d51e3586b8d978cbc4d4d3fad8d56763",
+  "git_dirty": false,
+  "teacher_source": {
+    "built": "build_teacher()"
+  },
+  "student_source": {
+    "built": "build_student()",
+    "healed_weights": {
+      "repo_id": "MarioAlonso7/topkd",
+      "filename": "student_resnet8_healed_c100_state_dict.pt",
+      "revision": "d4a68ebce3c2fa1b8c089e800f498d0c56972f11",
+      "sha256": "e26d8e6d7e9850e5853035a4a76b5db4ec38a94a47c035e82291ba2b82e6dd80"
+    }
+  },
+  "input_normalization": [
+    [
+      0.4914,
+      0.4822,
+      0.4465
+    ],
+    [
+      0.2023,
+      0.1994,
+      0.201
+    ]
+  ],
+  "topology_loss": null
+}
