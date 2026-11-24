@@ -1,6 +1,6 @@
 """Train one run from the command line.
 
-    uv run python -m topkd_imat.training.run --condition KD --supervision label-free \\
+    uv run python -m topkd_imat.training.run --condition KD --supervision label-free \
         --init pretrained --epochs 30
 
 Models: if a checkpoint is given (--teacher-checkpoint / --student-checkpoint, defaulting to
@@ -37,6 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--kd-T", type=float, default=d.kd_T)
     p.add_argument("--w-kd", type=float, default=d.w_kd)
     p.add_argument("--w-top", type=float, default=d.w_top)
+    p.add_argument("--pi-mode", choices=("legacy", "paper-h0"), default="legacy",
+                   help="PI construction; paper-h0 fits sigma, bounds and max on teacher training data")
+    p.add_argument("--pi-calibration-batches", type=int, default=64)
     p.add_argument("--runs-dir", default=d.runs_dir)
     p.add_argument("--data-root", default="data")
     p.add_argument("--num-workers", type=int, default=4)
@@ -50,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
 def get_model(spec: str | None, role: str, device: str | torch.device = "cpu"):
     """Return ``(model, source)``: the checkpoint ``spec`` if given, else the built model.
 
-    ``source`` says where the model came from, for the run's config.json.
+    ``source`` says where the model came from: for the run's config.json.
     """
     if spec:
         return load_model(spec, role, device), {"checkpoint": spec}
@@ -64,6 +67,8 @@ def get_model(spec: str | None, role: str, device: str | torch.device = "cpu"):
 
 def main(argv: list[str] | None = None) -> dict | None:
     args = build_parser().parse_args(argv)
+    if args.pi_calibration_batches <= 0:
+        raise ValueError("--pi-calibration-batches must be positive")
     cfg = RunConfig(
         dataset=args.dataset,
         condition=args.condition,
@@ -80,6 +85,9 @@ def main(argv: list[str] | None = None) -> dict | None:
     )
     if cfg.condition == "Baseline" and cfg.supervision == "label-free":
         sys.exit("Baseline trains on labels only; use --supervision label-supervised.")
+    if args.pi_mode == "paper-h0" and args.runs_dir == "runs":
+        sys.exit("Use a separate --runs-dir (e.g. runs_paper_pi) for paper-h0, "
+                 "otherwise existing result keys may silently skip this experiment.")
     if has_row(f"{cfg.runs_dir}/results.csv", cfg.key()):
         print(f"[{cfg.run_dir.name}] already in {cfg.runs_dir}/results.csv, skipping.")
         return None
@@ -90,7 +98,7 @@ def main(argv: list[str] | None = None) -> dict | None:
     if cfg.init == "scratch":
         reset_weights(student)
     topology_loss = None
-    if cfg.uses_top:
+    if cfg.uses_top and args.pi_mode == "legacy":
         from topkd_imat.topology import topology_loss
 
     loaders = make_loaders(
@@ -101,11 +109,27 @@ def main(argv: list[str] | None = None) -> dict | None:
         num_workers=args.num_workers,
         fake_size=args.fake_size,
     )
+    pi_calibration = None
+    if cfg.uses_top and args.pi_mode == "paper-h0":
+        from topkd_imat.topology.paper_pi import (
+            PaperH0PILoss, fit_teacher_pi_calibrations,
+        )
+        calibrated = fit_teacher_pi_calibrations(
+            teacher.to(args.device), loaders.train_eval, args.device,
+            max_batches=args.pi_calibration_batches,
+        )
+        topology_loss = [PaperH0PILoss(c) for c in calibrated]
+        pi_calibration = [c.to_dict() for c in calibrated]
     extra = {
         "teacher_source": teacher_source,
         "student_source": student_source,
         "input_normalization": models.INPUT_NORMALIZATION,
-        "topology_loss": type(topology_loss).__name__ if topology_loss is not None else None,
+        "topology_loss": (type(topology_loss[0]).__name__
+                          if isinstance(topology_loss, list) else
+                          type(topology_loss).__name__ if topology_loss is not None else None),
+        "pi_mode": args.pi_mode,
+        "pi_calibration": pi_calibration,
+        "pi_calibration_batches": args.pi_calibration_batches if pi_calibration else None,
     }
     return train_run(cfg, teacher, student, loaders, topology_loss, args.device, extra)
 

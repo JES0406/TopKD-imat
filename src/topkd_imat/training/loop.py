@@ -187,7 +187,16 @@ def _epoch(cfg, teacher, student, loader, topology_loss, device, opt) -> dict:
             with torch.no_grad():
                 terms["kd"] = distill_kl(s_logits, t_logits, cfg.kd_T)  # logged, not trained on
         if cfg.uses_top and x.shape[0] >= 2:
-            pairs = [topology_loss(t, s) for t, s in zip(t_feats, s_feats, strict=True)]
+            layer_losses = (
+                topology_loss if isinstance(topology_loss, (list, tuple))
+                else [topology_loss] * len(t_feats)
+            )
+            if len(layer_losses) != len(t_feats):
+                raise ValueError("Expected one topology loss per Teacher/Student layer pair")
+            pairs = [
+                criterion(t, s) for criterion, t, s in
+                zip(layer_losses, t_feats, s_feats, strict=True)
+            ]
             terms["top"] = torch.stack(pairs).mean()
         loss = (
             (cfg.w_ce * terms["ce"] if cfg.uses_ce else 0.0)
