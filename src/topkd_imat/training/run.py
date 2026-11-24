@@ -37,6 +37,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--kd-T", type=float, default=d.kd_T)
     p.add_argument("--w-kd", type=float, default=d.w_kd)
     p.add_argument("--w-top", type=float, default=d.w_top)
+    p.add_argument(
+        "--top-loss",
+        choices=("h0-pi", "h0-matched"),
+        default="h0-pi",
+        help="Topology Distillation Loss: h0-pi (ADR 0004) or h0-matched (ADR 0005)",
+    )
     p.add_argument("--runs-dir", default=d.runs_dir)
     p.add_argument("--data-root", default="data")
     p.add_argument("--num-workers", type=int, default=4)
@@ -91,7 +97,9 @@ def main(argv: list[str] | None = None) -> dict | None:
         reset_weights(student)
     topology_loss = None
     if cfg.uses_top:
-        from topkd_imat.topology import topology_loss
+        from topkd_imat.topology import make_topology_loss
+
+        topology_loss = make_topology_loss(args.top_loss)
 
     loaders = make_loaders(
         cfg.dataset,
