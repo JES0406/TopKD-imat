@@ -38,19 +38,22 @@ organised by class, even in the Teacher: the mean distance to the class centroid
 than the mean distance between centroids (1.28 and 1.21), and the nearest class centroid is
 right for 38 % and 55 % of the images. Vietoris-Rips persistence of random subsets of 64 points
 (H1–H4) and 150 points (H1–H3) was compared with two nulls of the same size, a Gaussian with
-the cloud's covariance and a mixture of one Gaussian per class. At pairs 0 and 1 the most
-persistent H1, H2 and H3 features are 0.56–1.19 times the nulls', and exceed them in 0–80 % of
-the subsets with no pattern: sampling noise. H4 is empty, in the nulls too. The real clouds
-even have *fewer* H2 and H3 features than the nulls. Beyond their covariance, which a
+the cloud's covariance and a mixture of one Gaussian per class. In the Teacher at pairs 0 and 1
+the most persistent H1 feature is 0.98–1.04 times the nulls', H2 0.80–1.14 and H3 0.47–1.17,
+and each exceeds the nulls' in 0–70 % of the subsets with no pattern: sampling noise. H4 is
+empty, in the nulls too. The real clouds even have *fewer* H2 and H3 features than the nulls
+(at pair 1 with 150 points: 44 and 8, against 58 and 17–19). Beyond their covariance, which a
 normalised H0 diagram does not encode, there is nothing topological to copy there.
 
 **3. Pair 2 holds the Teacher's class topology, and it is H0.** The Teacher's last cloud is 10
 Class Clusters: the 9 longest MST edges per batch are 2.8 times the rest, the nearest class
 centroid is right for 94 % of the images, and 92 % of the shorter MST edges join two images of
-the same class. Its H1 is the only higher-degree signal found: with 150 points its most
-persistent loop is 2 times the class mixture's in every subset, but short (0.16, against about
-0.65 for the long H0 edges) and only about 9 loops in a batch of 64. H2 and H3 are not
-consistent across sizes. No Student copies that H1.
+the same class. Its H1 is the only higher-degree signal found: its most persistent loop is 1.6
+times the class mixture's with 64 points (above it in 75 % of the subsets) and 2.3 times with
+150 (80 %), but short (0.16, against about 0.65 for the long H0 edges) and only about 9 loops in
+a batch of 64. H2 also exceeds the mixture, but rests on 1–6 features per subset; H3 has at
+most one. No Student copies that H1: KD's is 1.1 times its own class mixture's, KD+Top's
+1.1–1.3.
 
 So training pairs 0 and 1 only spends gradient on matching noise, and an H1 or H2 loss would
 add little: H0 at the last pair is where the Teacher's topology is.
