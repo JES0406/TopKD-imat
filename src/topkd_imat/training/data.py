@@ -55,7 +55,7 @@ def make_loaders(
                 image_size=(3, 32, 32),
                 num_classes=10,
                 transform=transform,
-                random_offset=0 if train else n,
+                random_offset=0 if train else fake_size,  # test never overlaps train
             )
         return datasets.CIFAR10(root, train=train, transform=transform, download=True)
 
