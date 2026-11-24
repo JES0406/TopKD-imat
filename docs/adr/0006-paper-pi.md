@@ -114,8 +114,14 @@ uv run python -m topkd_imat.training.grid --inits pretrained scratch --seeds 0 1
   --epochs 60 --w-top 0.1 --top-loss h0-pi-norm --runs-dir runs_h0-pi-norm
 ```
 
-Always retrain a plain KD control under identical seeds and training settings;
-the `--top-loss` option has no effect for conditions without Top.
+Always retrain a plain KD control under identical seeds and training settings.
+`--top-loss` also matters without Top: every Condition builds the loss and logs it without
+training on it (`train_top`, `val_top` and per Layer Pair `*_top_<i>` in `metrics.csv`; the
+test set in `test_topology.json`, in batches of the training batch size), so a KD control's
+topology is measured exactly as KD+Top's. Logging changes nothing in the run: the calibration
+forks the RNG and the term is computed without gradient. Before this, KD runs logged
+`val_top` 0; on the first search pass (seed 0) their test term was 0.31 at the last Layer
+Pair against 0.02–0.04 with KD+Top, and about 0.01 at the other two pairs for both.
 
 **Important:** a Student death above 2 would still be invisible; none was measured, but
 monitor PI coverage during training. The coefficient `w_top=0.1` was tuned on ADR 0004's PI scale and **must be re-tuned**;

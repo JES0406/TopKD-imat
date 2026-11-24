@@ -1,9 +1,12 @@
 """One training run: one Condition x Supervision x Initialisation x seed.
 
 Loss = CE (label-supervised) + w_kd * KD (KD, KD+Top) + w_top * mean over Layer Pairs of
-topology_loss (Top, KD+Top). The Teacher is frozen. After the last epoch the Student is
-evaluated on the test set (through a Probe Head for Top x label-free), its test-set clouds
-and checkpoint are saved, and one row is appended to the Results table.
+topology_loss (Top, KD+Top). The Teacher is frozen. Every term is logged for every Condition,
+trained on or not, so a KD control's topology can be compared with KD+Top's: ``top`` is the
+mean over Layer Pairs and ``top_<i>`` the term at Layer Pair i (NaN when no loss is given).
+After the last epoch the Student is evaluated on the test set (through a Probe Head for
+Top x label-free), its test-set clouds and checkpoint are saved, the topology term on the
+test set goes to ``test_topology.json``, and one row is appended to the Results table.
 """
 
 import csv
@@ -153,6 +156,12 @@ def train_run(
         writer.close()
 
     accuracy, clouds, labels = _evaluate(cfg, student, loaders, device)
+    if topology_loss is not None:
+        with torch.no_grad():
+            teacher_clouds, _ = collect(teacher, loaders.test, device)
+        test_top = topology_between(topology_loss, teacher_clouds, clouds, cfg.batch_size)
+        (run_dir / "test_topology.json").write_text(json.dumps(test_top, indent=2))
+        print(f"[{run_dir.name}] test topology {test_top['top']:.4f}", flush=True)
     np.savez_compressed(
         run_dir / "clouds_test.npz",
         labels=labels.numpy(),
@@ -168,8 +177,9 @@ def train_run(
 def _epoch(cfg, teacher, student, loader, topology_loss, device, opt) -> dict:
     """One pass; trains if ``opt`` is given. Returns mean loss terms and head accuracy."""
     student.train(opt is not None)
-    sums = {"loss": 0.0, "ce": 0.0, "kd": 0.0, "top": 0.0}
-    correct = seen = 0
+    sums = {"loss": 0.0, "ce": 0.0, "kd": 0.0}
+    top_sums: np.ndarray | None = None
+    correct = seen = top_seen = 0
     for x, y in loader:
         x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
         with torch.no_grad():
@@ -186,19 +196,14 @@ def _epoch(cfg, teacher, student, loader, topology_loss, device, opt) -> dict:
         else:
             with torch.no_grad():
                 terms["kd"] = distill_kl(s_logits, t_logits, cfg.kd_T)  # logged, not trained on
-        if cfg.uses_top and x.shape[0] >= 2:
-            layer_losses = (
-                topology_loss
-                if isinstance(topology_loss, (list, tuple))
-                else [topology_loss] * len(t_feats)
-            )
-            if len(layer_losses) != len(t_feats):
-                raise ValueError("Expected one topology loss per Teacher/Student layer pair")
-            pairs = [
-                criterion(t, s)
-                for criterion, t, s in zip(layer_losses, t_feats, s_feats, strict=True)
-            ]
-            terms["top"] = torch.stack(pairs).mean()
+        pairs = None
+        if topology_loss is not None and x.shape[0] >= 2:
+            if cfg.uses_top:
+                pairs = _pair_terms(topology_loss, t_feats, s_feats)
+                terms["top"] = torch.stack(pairs).mean()
+            else:
+                with torch.no_grad():  # logged, not trained on
+                    pairs = _pair_terms(topology_loss, t_feats, [f.detach() for f in s_feats])
         loss = (
             (cfg.w_ce * terms["ce"] if cfg.uses_ce else 0.0)
             + (cfg.w_kd * terms["kd"] if cfg.uses_kd else 0.0)
@@ -216,13 +221,59 @@ def _epoch(cfg, teacher, student, loader, topology_loss, device, opt) -> dict:
             opt.step()
         n = x.shape[0]
         sums["loss"] += float(torch.as_tensor(loss).detach()) * n
-        for k, v in terms.items():
-            sums[k] += float(v.detach()) * n
+        for k in ("ce", "kd"):
+            sums[k] += float(terms[k].detach()) * n
+        if pairs is not None:
+            values = np.array([float(v.detach()) for v in pairs]) * n
+            top_sums = values if top_sums is None else top_sums + values
+            top_seen += n
         correct += int((s_logits.argmax(1) == y).sum())
         seen += n
     out = {k: v / max(seen, 1) for k, v in sums.items()}
+    out.update(_top_columns(top_sums, top_seen))
     out["acc"] = correct / max(seen, 1)
     return out
+
+
+def _pair_terms(topology_loss, t_feats, s_feats) -> list[torch.Tensor]:
+    """The topology term at each Layer Pair (one loss for all pairs, or one per pair)."""
+    if isinstance(topology_loss, (list, tuple)):
+        layer_losses = topology_loss
+    else:
+        layer_losses = [topology_loss] * len(t_feats)
+    if len(layer_losses) != len(t_feats):
+        raise ValueError("Expected one topology loss per Teacher/Student layer pair")
+    return [criterion(t, s) for criterion, t, s in zip(layer_losses, t_feats, s_feats, strict=True)]
+
+
+def _top_columns(top_sums: np.ndarray | None, seen: int) -> dict:
+    """``top`` (mean over Layer Pairs) and ``top_<i>``; NaN when nothing was measured."""
+    if top_sums is None or not seen:
+        return {"top": float("nan")}
+    per_pair = [float(v) / seen for v in top_sums]
+    return {"top": float(np.mean(per_pair)), **{f"top_{i}": v for i, v in enumerate(per_pair)}}
+
+
+def topology_between(topology_loss, teacher_clouds, student_clouds, batch_size: int) -> dict:
+    """The topology term between test-set clouds, in consecutive batches of ``batch_size``.
+
+    The loss compares clouds of one batch, as in training, so the test set is cut into the
+    same batch size (the incomplete last batch is dropped) and the terms are averaged.
+    """
+    n = teacher_clouds[0].shape[0]
+    top_sums, seen = None, 0
+    with torch.no_grad():
+        for start in range(0, n - batch_size + 1, batch_size):
+            batch = slice(start, start + batch_size)
+            pairs = _pair_terms(
+                topology_loss,
+                [c[batch].detach().double() for c in teacher_clouds],
+                [c[batch].detach().double() for c in student_clouds],
+            )
+            values = np.array([float(v) for v in pairs])
+            top_sums = values if top_sums is None else top_sums + values
+            seen += 1
+    return {**_top_columns(top_sums, seen), "batches": seen, "batch_size": batch_size}
 
 
 def _evaluate(cfg, student, loaders, device):
