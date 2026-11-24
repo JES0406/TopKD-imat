@@ -1,4 +1,4 @@
-"""Paper-inspired PI calibration and gradient tests (no dataset downloads)."""
+"""Teacher-calibrated normalised PI (h0-pi-norm, ADR 0006): calibration and gradients."""
 
 import numpy as np
 import pytest
@@ -6,7 +6,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from topkd_imat.topology.h0 import H0PILoss
 from topkd_imat.topology.paper_pi import (
     PaperH0PILoss,
     PaperPICalibration,
@@ -21,18 +20,29 @@ def _centres(spec: PaperPICalibration) -> torch.Tensor:
     return spec.persistence_min + (torch.arange(spec.bins, dtype=torch.float64) + 0.5) * width
 
 
-def test_uses_raw_euclidean_deaths_and_student_gradients():
+def test_compares_shape_not_scale_and_reaches_the_student():
     teacher = torch.tensor([[0.0], [1.0], [3.0], [7.0]], dtype=torch.float64)
-    student = (2 * teacher).clone().requires_grad_(True)
-    # Same shape, twice the scale: the normalised loss of ADR 0004 cannot tell them apart...
-    assert H0PILoss()(teacher, student).item() == pytest.approx(0.0, abs=1e-12)
-    # ...but on raw distances the deaths differ, so the paper PI loss is positive.
-    spec = PaperPICalibration(0.0, 15.0, 1.0, 1.0, 100, 2)
-    loss = PaperH0PILoss(spec)(teacher, student)
+    spec = PaperPICalibration(0.0, 2.0, 0.1, 1.0, 100, 2)
+    # Same shape, twice the scale: the clouds are normalised, so the images are equal.
+    scaled = (2 * teacher).clone().requires_grad_(True)
+    assert PaperH0PILoss(spec)(teacher, scaled).item() == pytest.approx(0.0, abs=1e-12)
+    # A different shape gives a positive loss with a gradient on the Student.
+    other = torch.tensor([[0.0], [3.0], [4.0], [5.0]], dtype=torch.float64, requires_grad=True)
+    loss = PaperH0PILoss(spec)(teacher, other)
     assert loss.item() > 1e-3
     loss.backward()
-    assert student.grad is not None and torch.isfinite(student.grad).all()
-    assert student.grad.abs().sum() > 0
+    assert other.grad is not None and torch.isfinite(other.grad).all()
+    assert other.grad.abs().sum() > 0
+
+
+def test_calibration_is_the_same_for_a_rescaled_teacher_layer():
+    x = torch.tensor([[0.0, 0.0], [1.0, 0.0], [3.0, 1.0], [7.0, 2.0], [8.0, 5.0], [2.0, 9.0]])
+    loader = DataLoader(TensorDataset(x, torch.zeros(6, dtype=torch.long)), batch_size=3)
+    specs = fit_teacher_pi_calibrations(TinyTeacher(), loader, "cpu")
+    # TinyTeacher's second layer is the first one times 2: same shape, twice the scale.
+    # On raw distances its range would double; normalised, every parameter is the same.
+    for field in ("persistence_min", "persistence_max", "sigma", "pi_max"):
+        assert getattr(specs[1], field) == pytest.approx(getattr(specs[0], field), rel=1e-5)
 
 
 def test_identical_clouds_give_zero_loss():
@@ -125,15 +135,16 @@ class TinyTeacher(nn.Module):
 
 def _loader(shuffle=False):
     x = torch.arange(24, dtype=torch.float32).reshape(12, 2)
-    return DataLoader(TensorDataset(x, torch.zeros(12, dtype=torch.long)), batch_size=4,
-                      shuffle=shuffle)
+    return DataLoader(
+        TensorDataset(x, torch.zeros(12, dtype=torch.long)), batch_size=4, shuffle=shuffle
+    )
 
 
 def test_calibration_returns_one_set_per_layer():
     specs = fit_teacher_pi_calibrations(TinyTeacher(), _loader(), "cpu", max_batches=2)
     assert len(specs) == 2
     assert all(spec.n_clouds == 2 for spec in specs)
-    assert specs[1].persistence_max == pytest.approx(2 * specs[0].persistence_max, rel=1e-5)
+    assert specs[1].persistence_max == pytest.approx(specs[0].persistence_max, rel=1e-5)
 
 
 @pytest.mark.parametrize("shuffle", [False, True])

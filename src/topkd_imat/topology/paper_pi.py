@@ -1,10 +1,12 @@
-"""Paper-inspired, exact H0 persistence images, with teacher-only calibration.
+"""Exact H0 persistence images of normalised clouds, calibrated on the Teacher (h0-pi-norm).
 
 Deliberately retains this project's 1-D H0 PI and differentiable MST (rather than
-replacing them with the paper's 20x20 PI and RipsNet). Implements five specific
-choices from jekim5418/TopKD/ripsnet_utils.py, and keeps this project's weight:
+replacing them with the paper's 20x20 PI and RipsNet). Takes four choices from
+jekim5418/TopKD/ripsnet_utils.py and keeps this project's weight:
 
-1. Raw Euclidean MST death times (no per-cloud distance normalization).
+1. Distances: each cloud divided by its mean pairwise distance, as in ADR 0004, not the
+   paper's raw distances: a scratch Student's raw deaths fall below the Teacher's range
+   and get almost no gradient (ADR 0006). The calibration uses the same deaths.
 2. Weight w(p) = p, as in ADR 0004, not the paper's 10*tanh(p): a constant factor cancels
    against pi_max, and for the deaths measured here tanh(p) ~ p except at the last Layer
    Pair, where it would only down-weight the most persistent classes.
@@ -31,7 +33,11 @@ from topkd_imat.topology.h0 import h0_deaths
 
 @dataclass(frozen=True)
 class PaperPICalibration:
-    """Frozen parameters estimated on teacher *training* features for one layer."""
+    """Frozen parameters estimated on teacher *training* features for one layer.
+
+    All fields are in units of normalised distance (cloud divided by its mean pairwise
+    distance), the units of ``h0_deaths``.
+    """
 
     persistence_min: float
     persistence_max: float
@@ -53,14 +59,17 @@ class PaperPICalibration:
 def paper_pi_1d(deaths: torch.Tensor, calibration: PaperPICalibration) -> torch.Tensor:
     """A 1-D H0 PI on fixed teacher-fitted bounds, differentiable in deaths.
 
-    Each death d adds a Gaussian weighted by w(d) = d (ADR 0004). The common Gaussian normalization constant cancels against pi_max, so it is
-    omitted here. Crucially, pi_max is NOT recomputed from the Student/batch.
+    Each death d adds a Gaussian weighted by w(d) = d (ADR 0004). The common Gaussian
+    normalization constant cancels against pi_max, so it is omitted here. Crucially,
+    pi_max is NOT recomputed from the Student/batch.
     """
     width = (calibration.persistence_max - calibration.persistence_min) / calibration.bins
-    centres = calibration.persistence_min + (
-        torch.arange(calibration.bins, device=deaths.device, dtype=deaths.dtype) + 0.5
-    ) * width
-    gaussians = torch.exp(-0.5 * ((centres[None, :] - deaths[:, None]) / calibration.sigma).square())
+    centres = (
+        calibration.persistence_min
+        + (torch.arange(calibration.bins, device=deaths.device, dtype=deaths.dtype) + 0.5) * width
+    )
+    z = (centres[None, :] - deaths[:, None]) / calibration.sigma
+    gaussians = torch.exp(-0.5 * z.square())
     return (deaths[:, None] * gaussians).sum(dim=0) / calibration.pi_max
 
 
@@ -71,11 +80,12 @@ class PaperH0PILoss(BaseTopLoss):
         self.calibration = calibration
 
     def image(self, cloud: torch.Tensor) -> torch.Tensor:
-        return paper_pi_1d(h0_deaths(cloud, normalise=False), self.calibration)
+        return paper_pi_1d(h0_deaths(cloud), self.calibration)
 
     def _compute(self, teacher_cloud: torch.Tensor, student_cloud: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
-            target = self.image(teacher_cloud.to(device=student_cloud.device, dtype=student_cloud.dtype))
+            teacher_cloud = teacher_cloud.to(device=student_cloud.device, dtype=student_cloud.dtype)
+            target = self.image(teacher_cloud)
         return (self.image(student_cloud) - target).square().mean()
 
 
@@ -100,18 +110,14 @@ def _fit_one_layer(death_batches: list[np.ndarray], bins: int) -> PaperPICalibra
 
     # Compute the maximum over *all calibration PIs* for this teacher layer,
     # equivalent in spirit to the dataset-global MPI in the official code.
-    provisional = PaperPICalibration(
-        persistence_min, persistence_max, sigma, 1.0, bins, len(death_batches)
-    )
+    n = len(death_batches)
+    provisional = PaperPICalibration(persistence_min, persistence_max, sigma, 1.0, bins, n)
     pi_max = max(
-        float(paper_pi_1d(torch.from_numpy(deaths), provisional).max())
-        for deaths in death_batches
+        float(paper_pi_1d(torch.from_numpy(deaths), provisional).max()) for deaths in death_batches
     )
     if not np.isfinite(pi_max) or pi_max <= 0:
         raise ValueError("Teacher PI maximum is zero or not finite; cannot normalize")
-    return PaperPICalibration(
-        persistence_min, persistence_max, sigma, pi_max, bins, len(death_batches)
-    )
+    return PaperPICalibration(persistence_min, persistence_max, sigma, pi_max, bins, n)
 
 
 def fit_teacher_pi_calibrations(
@@ -148,7 +154,7 @@ def fit_teacher_pi_calibrations(
             if len(features) != len(deaths_by_layer):
                 raise ValueError("Teacher returned inconsistent number of layer features")
             for batches, features_layer in zip(deaths_by_layer, features, strict=True):
-                d = h0_deaths(features_layer, normalise=False)
+                d = h0_deaths(features_layer)
                 batches.append(d.detach().to(device="cpu", dtype=torch.float64).numpy())
     if not deaths_by_layer:
         raise ValueError("No teacher training clouds available for PI calibration")

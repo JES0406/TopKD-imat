@@ -5,7 +5,8 @@
 Per Initialisation: label-supervised x {Baseline, KD, Top, KD+Top} and label-free x
 {KD, Top, KD+Top} (Baseline needs labels) = 7 runs. ``--skip-top`` leaves out the
 Conditions that need the Topology Distillation Loss. Every other option (``--epochs``,
-``--w-top``, ``--runs-dir``, ...) is passed to ``topkd_imat.training.run`` unchanged.
+``--w-top``, ``--top-loss``, ...) is passed to ``topkd_imat.training.run`` unchanged. A grid
+with Top runs needs its own ``--runs-dir`` (e.g. ``runs_h0-pi-norm``), as ``run`` does.
 """
 
 import argparse
@@ -50,6 +51,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--runs-dir", default="runs")
     p.add_argument("--dry-run", action="store_true", help="list the runs and stop")
     args, passthrough = p.parse_known_args(argv)
+    if not args.skip_top and args.runs_dir == run.RunConfig().runs_dir:
+        # run.main refuses Top runs here; stop before the grid's first run, not halfway.
+        sys.exit(
+            "A grid with Top runs needs a --runs-dir of its own loss (e.g. runs_h0-pi-norm): "
+            "run names do not include --top-loss, so older runs would be skipped."
+        )
 
     runs = plan_runs(args.inits, args.skip_top, args.seeds, args.dataset)
     results = f"{args.runs_dir}/results.csv"

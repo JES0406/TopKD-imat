@@ -10,10 +10,14 @@ otherwise the model is built with ``topkd_imat.models.build_teacher()`` / ``buil
 lands in ``<runs-dir>/``; a run whose row already exists in ``<runs-dir>/results.csv`` is
 skipped.
 
-Topology Distillation Loss (``--top-loss``, Top and KD+Top only): ``h0-pi`` (ADR 0004, the
-default), ``h0-matched`` (ADR 0005, with correspondence) or ``h0-paper-pi`` (ADR 0006, the
-PI calibrated on the Teacher's training clouds as in the paper's code). Run names do not
-include the loss, so any loss but the default needs its own ``--runs-dir``.
+Topology Distillation Loss (``--top-loss``, Top and KD+Top only):
+
+- ``h0-pi-norm`` (default): the H0 Persistence Image of clouds divided by their mean pairwise
+  distance, with range, sigma and max calibrated on the Teacher's training clouds (ADR 0006);
+- ``h0-matched``: the Student keeps the Teacher's MST edges (ADR 0005).
+
+Run names do not include the loss, so every Top or KD+Top run needs a ``--runs-dir`` of its
+own loss (e.g. ``runs_h0-pi-norm``); older ``runs`` folders hold ADR 0004's ``h0-pi``.
 """
 
 import argparse
@@ -22,14 +26,14 @@ import sys
 import torch
 
 from topkd_imat import models
-from topkd_imat.topology import DEFAULT_LOSS, LOSSES
 from topkd_imat.training.checkpoints import load_model, reset_weights
 from topkd_imat.training.data import make_loaders
 from topkd_imat.training.loop import RunConfig, seed_everything, train_run
 from topkd_imat.training.results import CONDITIONS, INITS, SUPERVISIONS, has_row
 
-PAPER_PI = "h0-paper-pi"  # needs the Teacher and the data to calibrate, so built here
-TOP_LOSSES = (*LOSSES, PAPER_PI)
+CALIBRATED_PI = "h0-pi-norm"  # needs the Teacher and the data to calibrate, so built here
+TOP_LOSSES = (CALIBRATED_PI, "h0-matched")
+DEFAULT_TOP_LOSS = CALIBRATED_PI
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,14 +53,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--top-loss",
         choices=TOP_LOSSES,
-        default=DEFAULT_LOSS,
-        help="h0-pi (ADR 0004), h0-matched (ADR 0005) or h0-paper-pi (ADR 0006)",
+        default=DEFAULT_TOP_LOSS,
+        help="h0-pi-norm (default, ADR 0006) or h0-matched (ADR 0005)",
     )
     p.add_argument(
         "--pi-calibration-batches",
         type=int,
         default=64,
-        help="h0-paper-pi only: Teacher training batches used to calibrate the PIs",
+        help="h0-pi-norm only: Teacher training batches used to calibrate the PIs",
     )
     p.add_argument("--runs-dir", default=d.runs_dir)
     p.add_argument("--data-root", default="data")
@@ -86,10 +90,10 @@ def get_model(spec: str | None, role: str, device: str | torch.device = "cpu"):
 def build_topology_loss(name: str, teacher, loaders, device, calibration_batches: int):
     """Return ``(loss, calibration)``: one loss for every Layer Pair, or one per pair.
 
-    ``h0-paper-pi`` is calibrated on the Teacher's training clouds, one calibration per
-    Layer Pair, so it is a list of losses; ``calibration`` records them for config.json.
+    ``h0-pi-norm`` is calibrated on the Teacher's training clouds, one calibration per Layer
+    Pair, so it is a list of losses; ``calibration`` records them for config.json.
     """
-    if name != PAPER_PI:
+    if name != CALIBRATED_PI:
         from topkd_imat.topology import make_topology_loss
 
         return make_topology_loss(name), None
@@ -121,7 +125,7 @@ def main(argv: list[str] | None = None) -> dict | None:
     )
     if cfg.condition == "Baseline" and cfg.supervision == "label-free":
         sys.exit("Baseline trains on labels only; use --supervision label-supervised.")
-    if cfg.uses_top and args.top_loss != DEFAULT_LOSS and args.runs_dir == RunConfig().runs_dir:
+    if cfg.uses_top and args.runs_dir == RunConfig().runs_dir:
         sys.exit(
             f"--top-loss {args.top_loss} needs its own --runs-dir (e.g. runs_{args.top_loss}): "
             "run names do not include the loss, so existing runs would be skipped."
