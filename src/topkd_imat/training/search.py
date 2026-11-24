@@ -10,11 +10,12 @@ names do not include ``--w-kd``, ``--w-top`` or ``--top-loss``, so sharing a fol
 runs. Re-running resumes: a run whose row is already in its folder's ``results.csv`` is
 skipped.
 
-Defaults. ``w_top`` 3 / 10 / 30 / 100 put the topology term at about 2 %, 7 %, 20 % and 70 %
-of the KD term at a scratch Student's first batch (KD ~13, ``h0-pi-norm`` ~0.09 on CIFAR-10).
-The W4 sweep (ADR 0004's loss) kept ``w_top`` 0.1, a term at about 5 % of KD all through
-training, and rejected 1.0, about 50 %; in ``h0-pi-norm`` units those are about 6 and 60, so
-the grid spans them in half-decade steps. ``w_kd`` 1 / 2 / 4 brackets the paper's best (2;
+Defaults. ``w_top`` 1 / 3 / 10. The first pass (seed 0, 60 epochs, ``w_kd`` 1) had
+``w_top`` 3 / 10 / 30 / 100: validation accuracy 86.4 / 85.9 / 82.9 / 57.9 % against KD's
+86.5 %, while ``w_top`` 3 already cut the last Layer Pair's test ``h0-pi-norm`` from KD's
+0.31 to 0.03. So 30 and 100 were dropped and 1 added below the best. (Those weights put the
+topology term at only 2-12 % of KD during training: the term's share does not predict the
+harm.) ``w_kd`` 1 / 2 / 4 brackets the paper's best (2;
 Appendix D.1, where it degrades from 7). The KD temperature (4), the batch size (64) and the
 learning rate (0.1 from scratch) are not searched: they are the paper's or the grid's recipe
 for every Condition, and the batch is also the size of the Latent Point Cloud.
@@ -39,7 +40,7 @@ from topkd_imat.training import run
 
 TOP_LOSS = "h0-pi-norm"
 SUPERVISION, INIT = "label-supervised", "scratch"
-W_TOPS = (3.0, 10.0, 30.0, 100.0)
+W_TOPS = (1.0, 3.0, 10.0)
 W_KDS = (1.0, 2.0, 4.0)
 SET_BY_SEARCH = (
     "--condition", "--supervision", "--init", "--seed", "--runs-dir", "--top-loss", "--w-top",

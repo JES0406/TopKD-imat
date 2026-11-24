@@ -12,10 +12,10 @@ from topkd_imat.training.search import W_KDS, W_TOPS, main, plan, run_argv
 
 def test_plan_crosses_w_kd_with_w_top_and_gives_each_w_kd_a_kd_control():
     runs = plan(W_KDS, W_TOPS, seeds=(0, 1))
-    assert len(runs) == 2 * len(W_KDS) * (1 + len(W_TOPS)) == 30
+    assert len(runs) == 2 * len(W_KDS) * (1 + len(W_TOPS)) == 24
     configs = {r["config"] for r in runs}
     assert {"KD_wkd1", "KD_wkd2", "KD_wkd4"} <= configs
-    assert {"h0-pi-norm_wkd1_wtop3", "h0-pi-norm_wkd4_wtop100"} <= configs
+    assert {"h0-pi-norm_wkd1_wtop3", "h0-pi-norm_wkd4_wtop1"} <= configs
     assert not any("matched" in c for c in configs)  # only h0-pi-norm for now
     assert len({(r["config"], r["seed"]) for r in runs}) == len(runs)
 
