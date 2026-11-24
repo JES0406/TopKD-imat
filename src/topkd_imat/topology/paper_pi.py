@@ -2,10 +2,12 @@
 
 Deliberately retains this project's 1-D H0 PI and differentiable MST (rather than
 replacing them with the paper's 20x20 PI and RipsNet). Implements five specific
-choices from jekim5418/TopKD/ripsnet_utils.py:
+choices from jekim5418/TopKD/ripsnet_utils.py, and keeps this project's weight:
 
 1. Raw Euclidean MST death times (no per-cloud distance normalization).
-2. Weight 10*tanh(persistence); birth=0 for Vietoris-Rips H0.
+2. Weight w(p) = p, as in ADR 0004, not the paper's 10*tanh(p): a constant factor cancels
+   against pi_max, and for the deaths measured here tanh(p) ~ p except at the last Layer
+   Pair, where it would only down-weight the most persistent classes.
 3. Bandwidth = 20th percentile of nonzero pairwise differences of the first
    200 teacher diagram points (per layer), as in the official code.
 4. PI divided by a *shared teacher calibration maximum* (per layer), not by
@@ -51,7 +53,7 @@ class PaperPICalibration:
 def paper_pi_1d(deaths: torch.Tensor, calibration: PaperPICalibration) -> torch.Tensor:
     """A 1-D H0 PI on fixed teacher-fitted bounds, differentiable in deaths.
 
-    The common Gaussian normalization constant cancels against pi_max, so it is
+    Each death d adds a Gaussian weighted by w(d) = d (ADR 0004). The common Gaussian normalization constant cancels against pi_max, so it is
     omitted here. Crucially, pi_max is NOT recomputed from the Student/batch.
     """
     width = (calibration.persistence_max - calibration.persistence_min) / calibration.bins
@@ -59,8 +61,7 @@ def paper_pi_1d(deaths: torch.Tensor, calibration: PaperPICalibration) -> torch.
         torch.arange(calibration.bins, device=deaths.device, dtype=deaths.dtype) + 0.5
     ) * width
     gaussians = torch.exp(-0.5 * ((centres[None, :] - deaths[:, None]) / calibration.sigma).square())
-    weights = 10.0 * torch.tanh(deaths)
-    return (weights[:, None] * gaussians).sum(dim=0) / calibration.pi_max
+    return (deaths[:, None] * gaussians).sum(dim=0) / calibration.pi_max
 
 
 class PaperH0PILoss(BaseTopLoss):
@@ -131,7 +132,13 @@ def fit_teacher_pi_calibrations(
         raise ValueError("max_batches and bins must be positive")
     teacher.eval()
     deaths_by_layer: list[list[np.ndarray]] | None = None
-    with torch.no_grad():
+    # Iterating a DataLoader draws its base seed from the global torch RNG. Fork it, so a run
+    # that calibrates sees the same shuffling and augmentation as its control at that seed.
+    device = torch.device(device)
+    cuda = []
+    if device.type == "cuda":
+        cuda = [device.index if device.index is not None else torch.cuda.current_device()]
+    with torch.random.fork_rng(devices=cuda), torch.no_grad():
         for x, _ in islice(train_eval_loader, max_batches):
             if x.shape[0] < 2:
                 continue

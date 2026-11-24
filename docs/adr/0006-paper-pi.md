@@ -1,14 +1,21 @@
 # ADR 0006 — Paper-inspired PI calibration (experimental variant)
 
-The existing `H0PILoss` remains unchanged. Select `--top-loss h0-paper-pi` to test five
-construction choices from [TopKD's implementation](https://github.com/jekim5418/TopKD/blob/main/ripsnet_utils.py):
+The existing `H0PILoss` remains unchanged. Select `--top-loss h0-paper-pi` to test four
+construction choices from [TopKD's implementation](https://github.com/jekim5418/TopKD/blob/main/ripsnet_utils.py),
+while keeping this project's weight (point 2):
 
 1. **Raw distances:** use `h0_deaths(..., normalise=False)`, so the Euclidean MST
    edge lengths retain the Teacher/Student distance scale. No normalization by
    the mean distance of each cloud.
-2. **Weight:** `10*tanh(persistence)` instead of the original project `w(p)=p`.
-   In H0 every birth is zero, so the paper's `10*(tanh(p)+log(100*b+1))`
-   reduces to `10*tanh(p)`.
+2. **Weight: kept at `w(p)=p` (ADR 0004), not the paper's.** In H0 every birth
+   is zero, so the paper's `10*tanh(p)+10*log(100*b+1)` reduces to `10*tanh(p)`.
+   We do not adopt it: the factor 10 cancels against the global maximum (point 4);
+   on CIFAR-10 the Teacher deaths at the first two Layer Pairs lie in about
+   [0.16, 0.92], where `tanh(p) ~ p`; and at the last pair (deaths up to about 8)
+   it would only flatten the weight of the most persistent classes. Its bound
+   likely served the paper's RipsNet targets, which this project does not have.
+   Keeping `w(p)=p` leaves the variant differing from `h0-pi` only in scale
+   handling (points 1, 3, 4, 5).
 3. **Gaussian bandwidth:** per layer, take the 0.2 quantile of the nonzero
    pairwise distances among the first 200 `(birth, persistence)` points from
    Teacher training diagrams. With H0 this is `abs(p_i-p_j)`.
@@ -35,6 +42,10 @@ backpropagation. It uses the first `--pi-calibration-batches` batches (64 by
 default). The original generates many teacher training PIs and uses one global
 max; our calibration estimates that quantity from a bounded subset of teacher
 training images, separately for each of the three layer pairs.
+
+Iterating a DataLoader draws a seed from the global torch RNG, so calibration runs
+inside `torch.random.fork_rng()`: a `h0-paper-pi` run gets the same shuffling and
+augmentation stream as any other run with the same `--seed`.
 
 Run the paper-inspired variant in a *new* results directory, because the
 results grid keys do not include PI mode and would otherwise silently skip
