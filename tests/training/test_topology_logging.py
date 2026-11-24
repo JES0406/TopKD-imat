@@ -11,7 +11,7 @@ from tests.contracts.tinynet import TinyNet
 from topkd_imat.topology.paper_pi import PaperH0PILoss, PaperPICalibration
 from topkd_imat.training import run
 from topkd_imat.training.data import make_loaders
-from topkd_imat.training.loop import RunConfig, topology_between, train_run
+from topkd_imat.training.loop import RunConfig, _pair_terms, topology_between, train_run
 
 NORM = ((0.5, 0.5, 0.5), (0.25, 0.25, 0.25))
 SPEC = PaperPICalibration(sigma=0.05, pi_max=5.0, bins=200, n_clouds=1)
@@ -30,27 +30,57 @@ def _metrics(run_dir):
         return list(csv.DictReader(f))
 
 
-@pytest.mark.parametrize("condition", ["KD", "KD+Top", "Baseline"])
-def test_every_condition_logs_the_topology_term_per_layer_pair(checkpoints, condition):
-    runs_dir = checkpoints / "runs_x"
+def _run(checkpoints, condition, *extra):
+    runs_dir = checkpoints / f"runs_{condition}_{'_'.join(extra)}"
     run.main(
         [
             "--condition", condition, "--supervision", "label-supervised", "--init", "scratch",
             "--dataset", "fake", "--fake-size", "256", "--num-workers", "0", "--device", "cpu",
             "--epochs", "2", "--runs-dir", str(runs_dir), "--pi-calibration-batches", "2",
             "--teacher-checkpoint", str(checkpoints / "teacher.pt"),
-            "--student-checkpoint", str(checkpoints / "student.pt"),
+            "--student-checkpoint", str(checkpoints / "student.pt"), *extra,
         ]
     )  # fmt: skip
     (run_dir,) = (p for p in runs_dir.iterdir() if p.name != "teacher" and p.is_dir())
+    return run_dir
+
+
+@pytest.mark.parametrize("condition", ["KD", "KD+Top", "Baseline"])
+def test_every_condition_logs_the_topology_term_per_layer_pair(checkpoints, condition):
+    run_dir = _run(checkpoints, condition)
     for row in _metrics(run_dir):
         for split in ("train", "val"):
             pairs = [float(row[f"{split}_top_{i}"]) for i in range(2)]  # TinyNet: 2 pairs
             assert all(v > 0 and math.isfinite(v) for v in pairs)
-            assert float(row[f"{split}_top"]) == pytest.approx(sum(pairs) / 2, rel=1e-4)
+            # By default only the last Layer Pair is the topology term (ADR 0007).
+            assert float(row[f"{split}_top"]) == pytest.approx(pairs[-1], rel=1e-4)
     test = json.loads((run_dir / "test_topology.json").read_text())
-    assert test["top"] > 0 and {"top_0", "top_1"} <= set(test)
-    assert json.loads((run_dir / "config.json").read_text())["top_loss"] == "h0-pi-norm"
+    assert test["top"] == pytest.approx(test["top_1"]) and test["selected_pairs"] == [1]
+    config = json.loads((run_dir / "config.json").read_text())
+    assert (config["top_loss"], config["top_pairs"]) == ("h0-pi-norm", "last")
+
+
+def test_top_pairs_all_averages_every_layer_pair(checkpoints):
+    run_dir = _run(checkpoints, "KD+Top", "--top-pairs", "all")
+    row = _metrics(run_dir)[-1]
+    pairs = [float(row[f"val_top_{i}"]) for i in range(2)]
+    assert float(row["val_top"]) == pytest.approx(sum(pairs) / 2, rel=1e-4)
+    assert json.loads((run_dir / "test_topology.json").read_text())["selected_pairs"] == [0, 1]
+
+
+@pytest.mark.parametrize(("top_pairs", "trained"), [("last", [1]), ("all", [0, 1])])
+def test_only_the_selected_layer_pairs_get_a_gradient(top_pairs, trained):
+    torch.manual_seed(0)
+    teacher = [torch.randn(16, 4, dtype=torch.float64) for _ in range(2)]
+    student = [torch.randn(16, 3, dtype=torch.float64, requires_grad=True) for _ in range(2)]
+    selected = RunConfig(top_pairs=top_pairs).selected_pairs(2)
+    assert selected == trained
+    terms = _pair_terms(PaperH0PILoss(SPEC), teacher, student, selected)
+    torch.stack([terms[i] for i in selected]).mean().backward()
+    for i, cloud in enumerate(student):
+        reached = cloud.grad is not None and bool(cloud.grad.abs().sum() > 0)
+        assert reached == (i in trained)
+        assert terms[i].requires_grad == (i in trained)
 
 
 def _kd_run(tmp_path, topology_loss):

@@ -114,6 +114,9 @@ uv run python -m topkd_imat.training.grid --inits pretrained scratch --seeds 0 1
   --epochs 60 --w-top 0.1 --top-loss h0-pi-norm --runs-dir runs_h0-pi-norm
 ```
 
+Since [ADR 0007](0007-last-layer-pair-only.md) the term is trained at the last Layer Pair
+only (`--top-pairs last`); the calibration is still per pair, for the logs.
+
 Always retrain a plain KD control under identical seeds and training settings.
 `--top-loss` also matters without Top: every Condition builds the loss and logs it without
 training on it (`train_top`, `val_top` and per Layer Pair `*_top_<i>` in `metrics.csv`; the

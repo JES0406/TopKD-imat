@@ -58,6 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="h0-pi-norm (default, ADR 0006) or h0-matched (ADR 0005)",
     )
     p.add_argument(
+        "--top-pairs",
+        choices=("last", "all"),
+        default=d.top_pairs,
+        help="Layer Pairs the topology term trains: the last one (default, ADR 0007) or all",
+    )
+    p.add_argument(
         "--pi-calibration-batches",
         type=int,
         default=64,
@@ -122,6 +128,7 @@ def main(argv: list[str] | None = None) -> dict | None:
         kd_T=args.kd_T,
         w_kd=args.w_kd,
         w_top=args.w_top,
+        top_pairs=args.top_pairs,
         runs_dir=args.runs_dir,
     )
     if cfg.condition == "Baseline" and cfg.supervision == "label-free":

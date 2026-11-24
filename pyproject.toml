@@ -14,6 +14,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+analysis = [
+    "ripser>=0.6.15",
+]
 dev = [
     "pytest",
     "ruff",
