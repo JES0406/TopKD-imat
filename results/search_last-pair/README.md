@@ -50,9 +50,8 @@ alone included (82.3 %): it is the KD weight, not the topology term, that costs 
 ## Class structure at the last Layer Pair (`analysis/`)
 
 `analysis/h0_loss.csv` and `analysis/h0_class_structure.csv` come from
-`scripts/analyse_layer_topology.py --homology` (no Rips part) on these runs (except
-`h0-pi-norm-last_wkd4_wtop3`, whose test clouds were not kept), the KD controls and the first
-pass's `h0-pi-norm_wkd1_wtop3`; columns as in
+`scripts/analyse_layer_topology.py --homology` (no Rips part) on all these runs, the KD
+controls and the first pass's `h0-pi-norm_wkd1_wtop3`; columns as in
 [`../layer_topology/`](../layer_topology/). At pair 2, on the test set:
 
 | | Short MST edges within a class | Intra / inter | Nearest centroid | `h0-matched` to the Teacher | 9 longest MST edges / rest |
