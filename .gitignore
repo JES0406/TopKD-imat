@@ -33,3 +33,6 @@ wandb/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Training-run folders outside runs/ (search roots etc.)
+/runs_*/

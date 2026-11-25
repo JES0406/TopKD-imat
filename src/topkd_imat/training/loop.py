@@ -1,9 +1,14 @@
 """One training run: one Condition x Supervision x Initialisation x seed.
 
-Loss = CE (label-supervised) + w_kd * KD (KD, KD+Top) + w_top * mean over Layer Pairs of
-topology_loss (Top, KD+Top). The Teacher is frozen. After the last epoch the Student is
-evaluated on the test set (through a Probe Head for Top x label-free), its test-set clouds
-and checkpoint are saved, and one row is appended to the Results table.
+Loss = CE (label-supervised) + w_kd * KD (KD, KD+Top) + w_top * topology_loss (Top, KD+Top)
+at the Layer Pairs ``top_pairs`` selects: by default the last one only (ADR 0007), or the mean
+over all of them. The Teacher is frozen. Every term is logged for every Condition, trained on
+or not, so a KD control's topology can be compared with KD+Top's: ``top`` is the term over the
+selected Layer Pairs and ``top_<i>`` the term at Layer Pair i, selected or not (NaN when no
+loss is given).
+After the last epoch the Student is evaluated on the test set (through a Probe Head for
+Top x label-free), its test-set clouds and checkpoint are saved, the topology term on the
+test set goes to ``test_topology.json``, and one row is appended to the Results table.
 """
 
 import csv
@@ -49,6 +54,7 @@ class RunConfig:
     w_ce: float = 1.0
     w_kd: float = 1.0
     w_top: float = 1.0
+    top_pairs: str = "last"  # "last" (ADR 0007) or "all" (mean over every Layer Pair)
     runs_dir: str = "runs"
 
     @property
@@ -62,6 +68,14 @@ class RunConfig:
     @property
     def uses_top(self) -> bool:
         return self.condition in ("Top", "KD+Top")
+
+    def selected_pairs(self, n_pairs: int) -> list[int]:
+        """The Layer Pairs whose topology term is trained on (and reported as ``top``)."""
+        if self.top_pairs == "last":
+            return [n_pairs - 1]
+        if self.top_pairs == "all":
+            return list(range(n_pairs))
+        raise ValueError(f"top_pairs must be 'last' or 'all', got {self.top_pairs!r}")
 
     def key(self) -> dict:
         return {
@@ -153,6 +167,14 @@ def train_run(
         writer.close()
 
     accuracy, clouds, labels = _evaluate(cfg, student, loaders, device)
+    if topology_loss is not None:
+        with torch.no_grad():
+            teacher_clouds, _ = collect(teacher, loaders.test, device)
+        test_top = topology_between(
+            topology_loss, teacher_clouds, clouds, cfg.batch_size, cfg.selected_pairs(n_pairs)
+        )
+        (run_dir / "test_topology.json").write_text(json.dumps(test_top, indent=2))
+        print(f"[{run_dir.name}] test topology {test_top['top']:.4f}", flush=True)
     np.savez_compressed(
         run_dir / "clouds_test.npz",
         labels=labels.numpy(),
@@ -168,8 +190,9 @@ def train_run(
 def _epoch(cfg, teacher, student, loader, topology_loss, device, opt) -> dict:
     """One pass; trains if ``opt`` is given. Returns mean loss terms and head accuracy."""
     student.train(opt is not None)
-    sums = {"loss": 0.0, "ce": 0.0, "kd": 0.0, "top": 0.0}
-    correct = seen = 0
+    sums = {"loss": 0.0, "ce": 0.0, "kd": 0.0}
+    top_sums: np.ndarray | None = None
+    correct = seen = top_seen = 0
     for x, y in loader:
         x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
         with torch.no_grad():
@@ -186,19 +209,13 @@ def _epoch(cfg, teacher, student, loader, topology_loss, device, opt) -> dict:
         else:
             with torch.no_grad():
                 terms["kd"] = distill_kl(s_logits, t_logits, cfg.kd_T)  # logged, not trained on
-        if cfg.uses_top and x.shape[0] >= 2:
-            layer_losses = (
-                topology_loss
-                if isinstance(topology_loss, (list, tuple))
-                else [topology_loss] * len(t_feats)
-            )
-            if len(layer_losses) != len(t_feats):
-                raise ValueError("Expected one topology loss per Teacher/Student layer pair")
-            pairs = [
-                criterion(t, s)
-                for criterion, t, s in zip(layer_losses, t_feats, s_feats, strict=True)
-            ]
-            terms["top"] = torch.stack(pairs).mean()
+        pairs = None
+        if topology_loss is not None and x.shape[0] >= 2:
+            selected = cfg.selected_pairs(len(t_feats))
+            # With gradient only where it is trained on; the other pairs are only logged.
+            pairs = _pair_terms(topology_loss, t_feats, s_feats, selected if cfg.uses_top else [])
+            if cfg.uses_top:
+                terms["top"] = torch.stack([pairs[i] for i in selected]).mean()
         loss = (
             (cfg.w_ce * terms["ce"] if cfg.uses_ce else 0.0)
             + (cfg.w_kd * terms["kd"] if cfg.uses_kd else 0.0)
@@ -216,13 +233,81 @@ def _epoch(cfg, teacher, student, loader, topology_loss, device, opt) -> dict:
             opt.step()
         n = x.shape[0]
         sums["loss"] += float(torch.as_tensor(loss).detach()) * n
-        for k, v in terms.items():
-            sums[k] += float(v.detach()) * n
+        for k in ("ce", "kd"):
+            sums[k] += float(terms[k].detach()) * n
+        if pairs is not None:
+            values = np.array([float(v.detach()) for v in pairs]) * n
+            top_sums = values if top_sums is None else top_sums + values
+            top_seen += n
         correct += int((s_logits.argmax(1) == y).sum())
         seen += n
     out = {k: v / max(seen, 1) for k, v in sums.items()}
+    selected = cfg.selected_pairs(len(top_sums)) if top_sums is not None else []
+    out.update(_top_columns(top_sums, top_seen, selected))
     out["acc"] = correct / max(seen, 1)
     return out
+
+
+def _pair_terms(topology_loss, t_feats, s_feats, with_grad=()) -> list[torch.Tensor]:
+    """The topology term at each Layer Pair (one loss for all pairs, or one per pair).
+
+    Only the pairs in ``with_grad`` keep a gradient path to the Student; the others are
+    computed without gradient, for the logs.
+    """
+    if isinstance(topology_loss, (list, tuple)):
+        layer_losses = topology_loss
+    else:
+        layer_losses = [topology_loss] * len(t_feats)
+    if len(layer_losses) != len(t_feats):
+        raise ValueError("Expected one topology loss per Teacher/Student layer pair")
+    terms = []
+    for i, (criterion, t, s) in enumerate(zip(layer_losses, t_feats, s_feats, strict=True)):
+        if i in with_grad:
+            terms.append(criterion(t, s))
+        else:
+            with torch.no_grad():
+                terms.append(criterion(t, s.detach()))
+    return terms
+
+
+def _top_columns(top_sums: np.ndarray | None, seen: int, selected: list[int]) -> dict:
+    """``top`` (over the selected Layer Pairs) and ``top_<i>``; NaN when nothing was measured."""
+    if top_sums is None or not seen:
+        return {"top": float("nan")}
+    per_pair = [float(v) / seen for v in top_sums]
+    top = float(np.mean([per_pair[i] for i in selected]))
+    return {"top": top, **{f"top_{i}": v for i, v in enumerate(per_pair)}}
+
+
+def topology_between(
+    topology_loss, teacher_clouds, student_clouds, batch_size: int, selected=None
+) -> dict:
+    """The topology term between test-set clouds, in consecutive batches of ``batch_size``.
+
+    The loss compares clouds of one batch, as in training, so the test set is cut into the
+    same batch size (the incomplete last batch is dropped) and the terms are averaged.
+    ``top`` is the mean over the ``selected`` Layer Pairs (default: all of them).
+    """
+    n = teacher_clouds[0].shape[0]
+    top_sums, seen = None, 0
+    with torch.no_grad():
+        for start in range(0, n - batch_size + 1, batch_size):
+            batch = slice(start, start + batch_size)
+            pairs = _pair_terms(
+                topology_loss,
+                [c[batch].detach().double() for c in teacher_clouds],
+                [c[batch].detach().double() for c in student_clouds],
+            )
+            values = np.array([float(v) for v in pairs])
+            top_sums = values if top_sums is None else top_sums + values
+            seen += 1
+    selected = list(range(len(teacher_clouds))) if selected is None else list(selected)
+    return {
+        **_top_columns(top_sums, seen, selected),
+        "selected_pairs": selected,
+        "batches": seen,
+        "batch_size": batch_size,
+    }
 
 
 def _evaluate(cfg, student, loaders, device):

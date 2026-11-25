@@ -58,6 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="h0-pi-norm (default, ADR 0006) or h0-matched (ADR 0005)",
     )
     p.add_argument(
+        "--top-pairs",
+        choices=("last", "all"),
+        default=d.top_pairs,
+        help="Layer Pairs the topology term trains: the last one (default, ADR 0007) or all",
+    )
+    p.add_argument(
         "--pi-calibration-batches",
         type=int,
         default=64,
@@ -122,6 +128,7 @@ def main(argv: list[str] | None = None) -> dict | None:
         kd_T=args.kd_T,
         w_kd=args.w_kd,
         w_top=args.w_top,
+        top_pairs=args.top_pairs,
         runs_dir=args.runs_dir,
     )
     if cfg.condition == "Baseline" and cfg.supervision == "label-free":
@@ -149,18 +156,18 @@ def main(argv: list[str] | None = None) -> dict | None:
         num_workers=args.num_workers,
         fake_size=args.fake_size,
     )
-    topology_loss, calibration = None, None
-    if cfg.uses_top:
-        topology_loss, calibration = build_topology_loss(
-            args.top_loss, teacher, loaders, args.device, args.pi_calibration_batches
-        )
+    # Built for every Condition: trained on by Top and KD+Top, only logged by the others, so
+    # their topology is measured the same way. Calibration leaves the RNG untouched.
+    topology_loss, calibration = build_topology_loss(
+        args.top_loss, teacher, loaders, args.device, args.pi_calibration_batches
+    )
     first = topology_loss[0] if isinstance(topology_loss, list) else topology_loss
     extra = {
         "teacher_source": teacher_source,
         "student_source": student_source,
         "input_normalization": models.INPUT_NORMALIZATION,
-        "top_loss": args.top_loss if cfg.uses_top else None,
-        "topology_loss": type(first).__name__ if first is not None else None,
+        "top_loss": args.top_loss,  # trained on only by Top and KD+Top; logged by all
+        "topology_loss": type(first).__name__,
         "pi_calibration": calibration,
         "pi_calibration_batches": args.pi_calibration_batches if calibration else None,
     }
