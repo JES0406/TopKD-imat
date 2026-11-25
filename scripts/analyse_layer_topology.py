@@ -7,8 +7,9 @@ Reads the test-set Latent Point Clouds a training run saves (``<root>/<run>/*/cl
 and the Teacher's ``<root>/<run>/teacher/clouds_test.npz``), so it needs the runs on disk; the
 clouds are not in git. Writes three CSVs to ``--out``:
 
-1. ``h0_loss.csv``: the ``h0-pi-norm`` term between Teacher and Student test clouds at each Layer
-   Pair, in batches of 64 as in training (the Teacher calibration of a KD+Top run's config).
+1. ``h0_loss.csv``: the ``h0-pi-norm`` and ``h0-matched`` terms between Teacher and Student
+   test clouds at each Layer Pair, in batches of 64 as in training (``h0-pi-norm`` with the
+   Teacher calibration of a KD+Top run's config).
 2. ``h0_class_structure.csv``: what the H0 diagram says about the classes. Normalised MST deaths
    (quantiles; the 9 longest against the rest: 10 Class Clusters show as 9 long edges), the
    mean distance to the class centroid over the mean distance between centroids, the accuracy
@@ -35,6 +36,7 @@ from scipy.sparse.csgraph import minimum_spanning_tree
 from scipy.spatial.distance import cdist, pdist, squareform
 
 from topkd_imat.topology.h0 import h0_deaths
+from topkd_imat.topology.matched import H0MatchedLoss
 from topkd_imat.topology.paper_pi import PaperH0PILoss, PaperPICalibration
 from topkd_imat.training.loop import topology_between
 
@@ -84,8 +86,12 @@ def h0_loss(clouds: dict, cal: list[PaperPICalibration]) -> list[dict]:
         if run == "Teacher":
             continue
         student = [torch.from_numpy(z[f"pair_{p}"].astype(np.float32)) for p in range(3)]
-        out = topology_between(losses, teacher, student, BATCH)
-        rows += [{"run": run, "pair": p, "h0_pi_norm": out[f"top_{p}"]} for p in range(3)]
+        pi = topology_between(losses, teacher, student, BATCH)
+        matched = topology_between(H0MatchedLoss(), teacher, student, BATCH)
+        rows += [
+            {"run": run, "pair": p, "h0_pi_norm": pi[f"top_{p}"], "h0_matched": matched[f"top_{p}"]}
+            for p in range(3)
+        ]
     return rows
 
 
