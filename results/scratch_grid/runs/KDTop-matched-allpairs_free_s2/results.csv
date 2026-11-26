@@ -1,0 +1,2 @@
+dataset,condition,supervision,init,seed,accuracy,topology_distance
+CIFAR-10,KD+Top,label-free,scratch,2,0.8615000247955322,2.024414693002905

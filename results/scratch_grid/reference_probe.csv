@@ -1,0 +1,9 @@
+model,bn,probe_accuracy
+student_pretrained_untrained,as-built,0.6877
+student_pretrained_untrained,recomputed,0.6789
+student_scratch_untrained_s0,as-built,0.3805
+student_scratch_untrained_s0,recomputed,0.3665
+student_scratch_untrained_s1,as-built,0.3808
+student_scratch_untrained_s1,recomputed,0.3668
+student_scratch_untrained_s2,as-built,0.381
+student_scratch_untrained_s2,recomputed,0.3666

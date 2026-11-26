@@ -1,0 +1,4 @@
+run,pair,death_q10,death_q50,death_q90,longest9_over_rest,intra_over_inter,nearest_centroid_acc,mst_short_edges_same_class,mst_longest_edges_cross_class
+Teacher,0,0.37531,0.48947,0.64477,1.49467,1.28376,0.3756,0.23144,0.76692
+Teacher,1,0.48064,0.58387,0.70582,1.32824,1.21492,0.5496,0.32938,0.70905
+Teacher,2,0.12605,0.22481,0.58307,2.84536,0.24095,0.9432,0.91764,0.79986

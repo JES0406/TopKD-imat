@@ -1,0 +1,2 @@
+dataset,condition,supervision,init,seed,accuracy,topology_distance
+CIFAR-10,Baseline,label-supervised,scratch,0,0.8536999821662903,2.0704074848367426
